@@ -67,7 +67,7 @@ receivers:
         method: GET
       - endpoint: https://guyshahine.com/
         method: GET
-    collection_interval: 60s
+    collection_interval: 300s
 
 processors:
   batch:
