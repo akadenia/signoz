@@ -193,7 +193,7 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 	}
 
 	// start the usagemanager
-	usageManager, err := usage.New("sqlite", localDB, lm.GetRepo(), reader.GetConn())
+	usageManager, err := usage.New("sqlite", modelDao, lm.GetRepo(), reader.GetConn())
 	if err != nil {
 		return nil, err
 	}
@@ -331,6 +331,7 @@ func (s *Server) createPublicServer(apiHandler *api.APIHandler) (*http.Server, e
 	apiHandler.RegisterMetricsRoutes(r, am)
 	apiHandler.RegisterLogsRoutes(r, am)
 	apiHandler.RegisterQueryRangeV3Routes(r, am)
+	apiHandler.RegisterQueryRangeV4Routes(r, am)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
