@@ -2,9 +2,11 @@ import './WidgetFullView.styles.scss';
 
 import { SyncOutlined } from '@ant-design/icons';
 import { Button } from 'antd';
+import cx from 'classnames';
 import { ToggleGraphProps } from 'components/Graph/types';
 import Spinner from 'components/Spinner';
 import TimePreference from 'components/TimePreferenceDropDown';
+import { PANEL_TYPES } from 'constants/queryBuilder';
 import GridPanelSwitch from 'container/GridPanelSwitch';
 import {
 	timeItems,
@@ -23,12 +25,12 @@ import { useSelector } from 'react-redux';
 import { AppState } from 'store/reducers';
 import { GlobalReducer } from 'types/reducer/globalTime';
 import uPlot from 'uplot';
+import { getSortedSeriesData } from 'utils/getSortedSeriesData';
 import { getTimeRange } from 'utils/getTimeRange';
 
 import { getGraphVisibilityStateOnDataChange } from '../utils';
 import { PANEL_TYPES_VS_FULL_VIEW_TABLE } from './contants';
 import GraphManager from './GraphManager';
-// import GraphManager from './GraphManager';
 import { GraphContainer, TimeContainer } from './styles';
 import { FullViewProps } from './types';
 
@@ -96,7 +98,7 @@ function FullView({
 		},
 		{
 			queryKey: `FullViewGetMetricsQueryRange-${selectedTime.enum}-${globalSelectedTime}-${widget.id}`,
-			enabled: !isDependedDataLoaded,
+			enabled: !isDependedDataLoaded && widget.panelTypes !== PANEL_TYPES.LIST, // Internally both the list view panel has it's own query range api call, so we don't need to call it again
 		},
 	);
 
@@ -104,6 +106,13 @@ function FullView({
 		panelType: widget.panelTypes,
 		panelTypeAndGraphManagerVisibility: PANEL_TYPES_VS_FULL_VIEW_TABLE,
 	});
+
+	if (response.data && widget.panelTypes === PANEL_TYPES.BAR) {
+		const sortedSeriesData = getSortedSeriesData(
+			response.data?.payload.data.result,
+		);
+		response.data.payload.data.result = sortedSeriesData;
+	}
 
 	const chartData = getUPlotChartData(response?.data?.payload, widget.fillSpans);
 
@@ -150,6 +159,7 @@ function FullView({
 				maxTimeScale,
 				softMax: widget.softMax === undefined ? null : widget.softMax,
 				softMin: widget.softMin === undefined ? null : widget.softMin,
+				panelType: widget.panelTypes,
 			});
 
 			setChartOptions(newChartOptions);
@@ -163,6 +173,8 @@ function FullView({
 		});
 		parentGraphVisibilityState(graphsVisibilityStates);
 	}, [graphsVisibilityStates, parentGraphVisibilityState]);
+
+	const isListView = widget.panelTypes === PANEL_TYPES.LIST;
 
 	if (response.isFetching) {
 		return <Spinner height="100%" size="large" tip="Loading..." />;
@@ -192,14 +204,17 @@ function FullView({
 			</div>
 
 			<div
-				className={
-					isDashboardLocked ? 'graph-container disabled' : 'graph-container'
-				}
+				className={cx('graph-container', {
+					disabled: isDashboardLocked,
+					'list-graph-container': isListView,
+				})}
 				ref={fullViewRef}
 			>
 				{chartOptions && (
 					<GraphContainer
-						style={{ height: '90%' }}
+						style={{
+							height: isListView ? '100%' : '90%',
+						}}
 						isGraphLegendToggleAvailable={canModifyChart}
 					>
 						<GridPanelSwitch
@@ -214,6 +229,10 @@ function FullView({
 							query={widget.query}
 							ref={fullViewChartRef}
 							thresholds={widget.thresholds}
+							selectedLogFields={widget.selectedLogFields}
+							dataSource={widget.query.builder.queryData[0].dataSource}
+							selectedTracesFields={widget.selectedTracesFields}
+							selectedTime={selectedTime}
 						/>
 					</GraphContainer>
 				)}

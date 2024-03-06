@@ -68,6 +68,7 @@ export const frameworksMap = {
 	},
 	LogsManagement: {},
 	InfrastructureMonitoring: {},
+	AwsMonitoring: {},
 };
 
 export const defaultApplicationDataSource = {
@@ -106,6 +107,21 @@ const supportedLanguages = [
 		name: '.NET',
 		id: 'dotnet',
 		imgURL: `Logos/dotnet.png`,
+	},
+	{
+		name: 'rust',
+		id: 'rust',
+		imgURL: `Logos/rust.png`,
+	},
+	{
+		name: 'elixir',
+		id: 'elixir',
+		imgURL: `Logos/elixir.png`,
+	},
+	{
+		name: 'swift',
+		id: 'swift',
+		imgURL: `Logos/swift.png`,
 	},
 ];
 
@@ -197,6 +213,45 @@ const supportedInfraMetrics = [
 	},
 ];
 
+export const defaultAwsServices = {
+	name: 'EC2 - Application Logs',
+	id: 'awsEc2ApplicationLogs',
+	imgURL: `Logos/ec2.svg`,
+};
+
+const supportedAwsServices = [
+	{
+		name: 'EC2 - App/Server Logs',
+		id: 'awsEc2ApplicationLogs',
+		imgURL: `Logos/ec2.svg`,
+	},
+	{
+		name: 'EC2 - Infra Metrics',
+		id: 'awsEc2InfrastructureMetrics',
+		imgURL: `Logos/ec2.svg`,
+	},
+	{
+		name: 'ECS - EC2',
+		id: 'awsEcsEc2',
+		imgURL: `Logos/ecs.svg`,
+	},
+	{
+		name: 'ECS - Fargate',
+		id: 'awsEcsFargate',
+		imgURL: `Logos/ecs.svg`,
+	},
+	{
+		name: 'ECS - External',
+		id: 'awsEcsExternal',
+		imgURL: `Logos/ecs.svg`,
+	},
+	{
+		name: 'EKS',
+		id: 'awsEks',
+		imgURL: `Logos/eks.svg`,
+	},
+];
+
 export const getDataSources = (module: ModuleProps): DataSourceType[] => {
 	if (module.id === ModulesMap.APM) {
 		return supportedLanguages;
@@ -206,7 +261,11 @@ export const getDataSources = (module: ModuleProps): DataSourceType[] => {
 		return supportedInfraMetrics;
 	}
 
-	return supportedLogsTypes;
+	if (module.id === ModulesMap.LogsManagement) {
+		return supportedLogsTypes;
+	}
+
+	return supportedAwsServices;
 };
 
 export const getSupportedFrameworks = ({
@@ -222,7 +281,10 @@ export const getSupportedFrameworks = ({
 	if (
 		(moduleID === ModulesMap.APM && dataSourceName === 'go') ||
 		(moduleID === ModulesMap.APM && dataSourceName === 'rails') ||
-		(moduleID === ModulesMap.APM && dataSourceName === '.NET')
+		(moduleID === ModulesMap.APM && dataSourceName === '.NET') ||
+		(moduleID === ModulesMap.APM && dataSourceName === 'rust') ||
+		(moduleID === ModulesMap.APM && dataSourceName === 'elixir') ||
+		(moduleID === ModulesMap.APM && dataSourceName === 'swift')
 	) {
 		return [];
 	}
@@ -248,7 +310,10 @@ export const hasFrameworks = ({
 		moduleID === ModulesMap.InfrastructureMonitoring ||
 		(moduleID === ModulesMap.APM && dataSourceName === 'go') ||
 		(moduleID === ModulesMap.APM && dataSourceName === 'rails') ||
-		(moduleID === ModulesMap.APM && dataSourceName === '.NET')
+		(moduleID === ModulesMap.APM && dataSourceName === '.NET') ||
+		(moduleID === ModulesMap.APM && dataSourceName === 'rust') ||
+		(moduleID === ModulesMap.APM && dataSourceName === 'elixir') ||
+		(moduleID === ModulesMap.APM && dataSourceName === 'swift')
 	) {
 		return false;
 	}

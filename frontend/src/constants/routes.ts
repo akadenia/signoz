@@ -24,6 +24,7 @@ const ROUTES = {
 	MY_SETTINGS: '/my-settings',
 	SETTINGS: '/settings',
 	ORG_SETTINGS: '/settings/org-settings',
+	API_KEYS: '/settings/access-tokens',
 	INGESTION_SETTINGS: '/settings/ingestion-settings',
 	SOMETHING_WENT_WRONG: '/something-went-wrong',
 	UN_AUTHORIZED: '/un-authorized',
@@ -41,7 +42,10 @@ const ROUTES = {
 	TRACE_EXPLORER: '/trace-explorer',
 	BILLING: '/billing',
 	SUPPORT: '/support',
+	LOGS_SAVE_VIEWS: '/logs-save-views',
+	TRACES_SAVE_VIEWS: '/traces-save-views',
 	WORKSPACE_LOCKED: '/workspace-locked',
-};
+	SHORTCUTS: '/shortcuts',
+} as const;
 
 export default ROUTES;

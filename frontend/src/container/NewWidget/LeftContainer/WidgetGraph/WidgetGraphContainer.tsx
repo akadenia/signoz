@@ -1,9 +1,12 @@
 import { Card, Typography } from 'antd';
 import Spinner from 'components/Spinner';
+import { PANEL_TYPES } from 'constants/queryBuilder';
 import { WidgetGraphProps } from 'container/NewWidget/types';
 import { useGetWidgetQueryRange } from 'hooks/queryBuilder/useGetWidgetQueryRange';
 import useUrlQuery from 'hooks/useUrlQuery';
 import { useDashboard } from 'providers/Dashboard/Dashboard';
+import { getGraphType } from 'utils/getGraphType';
+import { getSortedSeriesData } from 'utils/getSortedSeriesData';
 
 import { NotFoundContainer } from './styles';
 import WidgetGraph from './WidgetGraphs';
@@ -16,6 +19,8 @@ function WidgetGraphContainer({
 	fillSpans = false,
 	softMax,
 	softMin,
+	selectedLogFields,
+	selectedTracesFields,
 }: WidgetGraphProps): JSX.Element {
 	const { selectedDashboard } = useDashboard();
 
@@ -28,9 +33,16 @@ function WidgetGraphContainer({
 	const selectedWidget = widgets.find((e) => e.id === widgetId);
 
 	const getWidgetQueryRange = useGetWidgetQueryRange({
-		graphType: selectedGraph,
+		graphType: getGraphType(selectedGraph),
 		selectedTime: selectedTime.enum,
 	});
+
+	if (getWidgetQueryRange.data && selectedGraph === PANEL_TYPES.BAR) {
+		const sortedSeriesData = getSortedSeriesData(
+			getWidgetQueryRange.data?.payload.data.result,
+		);
+		getWidgetQueryRange.data.payload.data.result = sortedSeriesData;
+	}
 
 	if (selectedWidget === undefined) {
 		return <Card>Invalid widget</Card>;
@@ -46,7 +58,21 @@ function WidgetGraphContainer({
 	if (getWidgetQueryRange.isLoading) {
 		return <Spinner size="large" tip="Loading..." />;
 	}
-	if (getWidgetQueryRange.data?.payload.data.result.length === 0) {
+
+	if (
+		selectedGraph !== PANEL_TYPES.LIST &&
+		getWidgetQueryRange.data?.payload.data.result.length === 0
+	) {
+		return (
+			<NotFoundContainer>
+				<Typography>No Data</Typography>
+			</NotFoundContainer>
+		);
+	}
+	if (
+		selectedGraph === PANEL_TYPES.LIST &&
+		getWidgetQueryRange.data?.payload.data.newResult.data.result.length === 0
+	) {
 		return (
 			<NotFoundContainer>
 				<Typography>No Data</Typography>
@@ -63,6 +89,10 @@ function WidgetGraphContainer({
 			fillSpans={fillSpans}
 			softMax={softMax}
 			softMin={softMin}
+			selectedLogFields={selectedLogFields}
+			selectedTracesFields={selectedTracesFields}
+			selectedTime={selectedTime}
+			selectedGraph={selectedGraph}
 		/>
 	);
 }

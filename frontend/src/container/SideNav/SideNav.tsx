@@ -3,14 +3,12 @@
 import './SideNav.styles.scss';
 
 import { Button } from 'antd';
-import getLocalStorageKey from 'api/browser/localstorage/get';
 import cx from 'classnames';
-import { IS_SIDEBAR_COLLAPSED } from 'constants/app';
 import { FeatureKeys } from 'constants/features';
 import ROUTES from 'constants/routes';
-import { ToggleButton } from 'container/Header/styles';
+import { GlobalShortcuts } from 'constants/shortcuts/globalShortcuts';
+import { useKeyboardHotkeys } from 'hooks/hotkeys/useKeyboardHotkeys';
 import useComponentPermission from 'hooks/useComponentPermission';
-import useThemeMode, { useIsDarkMode } from 'hooks/useDarkMode';
 import { LICENSE_PLAN_KEY, LICENSE_PLAN_STATUS } from 'hooks/useLicense';
 import history from 'lib/history';
 import {
@@ -21,17 +19,10 @@ import {
 	RocketIcon,
 	UserCircle,
 } from 'lucide-react';
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useState,
-} from 'react';
+import { MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
-import { sideBarCollapse } from 'store/actions';
 import { AppState } from 'store/reducers';
 import { License } from 'types/api/licenses/def';
 import AppReducer from 'types/reducer/app';
@@ -44,25 +35,32 @@ import defaultMenuItems, {
 	helpSupportMenuItem,
 	inviteMemberMenuItem,
 	manageLicenseMenuItem,
+	shortcutMenuItem,
 	slackSupportMenuItem,
 	trySignozCloudMenuItem,
 } from './menuItems';
 import NavItem from './NavItem/NavItem';
-import { SecondaryMenuItemKey } from './sideNav.types';
+import { SecondaryMenuItemKey, SidebarItem } from './sideNav.types';
 import { getActiveMenuKeyFromPath } from './sideNav.utils';
+
+interface UserManagementMenuItems {
+	key: string;
+	label: string;
+	icon: JSX.Element;
+}
 
 function SideNav({
 	licenseData,
 	isFetching,
+	onCollapse,
+	collapsed,
 }: {
 	licenseData: any;
 	isFetching: boolean;
+	onCollapse: () => void;
+	collapsed: boolean;
 }): JSX.Element {
-	const dispatch = useDispatch();
 	const [menuItems, setMenuItems] = useState(defaultMenuItems);
-	const [collapsed, setCollapsed] = useState<boolean>(
-		getLocalStorageKey(IS_SIDEBAR_COLLAPSED) === 'true',
-	);
 
 	const { pathname, search } = useLocation();
 	const {
@@ -82,21 +80,19 @@ function SideNav({
 		icon: <UserCircle size={16} />,
 	};
 
-	const [userManagementMenuItems, setUserManagementMenuItems] = useState([
-		manageLicenseMenuItem,
-	]);
+	const [userManagementMenuItems, setUserManagementMenuItems] = useState<
+		UserManagementMenuItems[]
+	>([manageLicenseMenuItem]);
 
 	const onClickSlackHandler = (): void => {
 		window.open('https://signoz.io/slack', '_blank');
 	};
 
-	const onClickVersionHandler = (): void => {
-		history.push(ROUTES.VERSION);
-	};
-
 	const isLatestVersion = checkVersionState(currentVersion, latestVersion);
 
 	const [inviteMembers] = useComponentPermission(['invite_members'], role);
+
+	const { registerShortcut, deregisterShortcut } = useKeyboardHotkeys();
 
 	useEffect(() => {
 		if (inviteMembers) {
@@ -148,14 +144,6 @@ function SideNav({
 
 	const { t } = useTranslation('');
 
-	const onCollapse = useCallback(() => {
-		setCollapsed((collapsed) => !collapsed);
-	}, []);
-
-	useLayoutEffect(() => {
-		dispatch(sideBarCollapse(collapsed));
-	}, [collapsed, dispatch]);
-
 	const isLicenseActive =
 		licenseData?.payload?.licenses?.find((e: License) => e.isCurrent)?.status ===
 		LICENSE_PLAN_STATUS.VALID;
@@ -172,19 +160,49 @@ function SideNav({
 		);
 	};
 
-	const onClickGetStarted = (): void => {
-		history.push(`/get-started`);
+	const isCtrlMetaKey = (e: MouseEvent): boolean => e.ctrlKey || e.metaKey;
+
+	const openInNewTab = (path: string): void => {
+		window.open(path, '_blank');
+	};
+
+	const onClickShortcuts = (e: MouseEvent): void => {
+		if (isCtrlMetaKey(e)) {
+			openInNewTab('/shortcuts');
+		} else {
+			history.push(`/shortcuts`);
+		}
+	};
+
+	const onClickGetStarted = (event: MouseEvent): void => {
+		if (isCtrlMetaKey(event)) {
+			openInNewTab('/get-started');
+		} else {
+			history.push(`/get-started`);
+		}
+	};
+
+	const onClickVersionHandler = (event: MouseEvent): void => {
+		if (isCtrlMetaKey(event)) {
+			openInNewTab(ROUTES.VERSION);
+		} else {
+			history.push(ROUTES.VERSION);
+		}
 	};
 
 	const onClickHandler = useCallback(
-		(key: string) => {
+		(key: string, event: MouseEvent | null) => {
 			const params = new URLSearchParams(search);
 			const availableParams = routeConfig[key];
 
 			const queryString = getQueryString(availableParams || [], params);
 
 			if (pathname !== key) {
-				history.push(`${key}?${queryString.join('&')}`);
+				if (event && isCtrlMetaKey(event)) {
+					openInNewTab(`${key}?${queryString.join('&')}`);
+				} else {
+					history.push(`${key}?${queryString.join('&')}`);
+				}
 			}
 		},
 		[pathname, search],
@@ -193,9 +211,6 @@ function SideNav({
 	const activeMenuKey = useMemo(() => getActiveMenuKeyFromPath(pathname), [
 		pathname,
 	]);
-
-	const isDarkMode = useIsDarkMode();
-	const { toggleTheme } = useThemeMode();
 
 	const isCloudUserVal = isCloudUser();
 
@@ -227,16 +242,19 @@ function SideNav({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentVersion, latestVersion]);
 
-	const handleUserManagentMenuItemClick = (key: string): void => {
+	const handleUserManagentMenuItemClick = (
+		key: string,
+		event: MouseEvent,
+	): void => {
 		switch (key) {
 			case SecondaryMenuItemKey.Slack:
 				onClickSlackHandler();
 				break;
 			case SecondaryMenuItemKey.Version:
-				onClickVersionHandler();
+				onClickVersionHandler(event);
 				break;
 			default:
-				onClickHandler(key);
+				onClickHandler(key, event);
 				break;
 		}
 	};
@@ -262,15 +280,63 @@ function SideNav({
 		? ROUTES.ORG_SETTINGS
 		: ROUTES.SETTINGS;
 
+	const handleMenuItemClick = (event: MouseEvent, item: SidebarItem): void => {
+		if (item.key === ROUTES.SETTINGS) {
+			if (isCtrlMetaKey(event)) {
+				openInNewTab(settingsRoute);
+			} else {
+				history.push(settingsRoute);
+			}
+		} else if (item) {
+			onClickHandler(item?.key as string, event);
+		}
+	};
+
+	useEffect(() => {
+		registerShortcut(GlobalShortcuts.SidebarCollapse, onCollapse);
+
+		registerShortcut(GlobalShortcuts.NavigateToServices, () =>
+			onClickHandler(ROUTES.APPLICATION, null),
+		);
+		registerShortcut(GlobalShortcuts.NavigateToTraces, () =>
+			onClickHandler(ROUTES.TRACE, null),
+		);
+
+		registerShortcut(GlobalShortcuts.NavigateToLogs, () =>
+			onClickHandler(ROUTES.LOGS, null),
+		);
+
+		registerShortcut(GlobalShortcuts.NavigateToDashboards, () =>
+			onClickHandler(ROUTES.ALL_DASHBOARD, null),
+		);
+
+		registerShortcut(GlobalShortcuts.NavigateToAlerts, () =>
+			onClickHandler(ROUTES.LIST_ALL_ALERT, null),
+		);
+		registerShortcut(GlobalShortcuts.NavigateToExceptions, () =>
+			onClickHandler(ROUTES.ALL_ERROR, null),
+		);
+
+		return (): void => {
+			deregisterShortcut(GlobalShortcuts.SidebarCollapse);
+			deregisterShortcut(GlobalShortcuts.NavigateToServices);
+			deregisterShortcut(GlobalShortcuts.NavigateToTraces);
+			deregisterShortcut(GlobalShortcuts.NavigateToLogs);
+			deregisterShortcut(GlobalShortcuts.NavigateToDashboards);
+			deregisterShortcut(GlobalShortcuts.NavigateToAlerts);
+			deregisterShortcut(GlobalShortcuts.NavigateToExceptions);
+		};
+	}, [deregisterShortcut, onClickHandler, onCollapse, registerShortcut]);
+
 	return (
 		<div className={cx('sideNav', collapsed ? 'collapsed' : '')}>
 			<div className="brand">
 				<div
 					className="brand-logo"
 					// eslint-disable-next-line react/no-unknown-property
-					onClick={(): void => {
+					onClick={(event: MouseEvent): void => {
 						// Current home page
-						onClickHandler(ROUTES.APPLICATION);
+						onClickHandler(ROUTES.APPLICATION, event);
 					}}
 				>
 					<img src="/Logos/signoz-brand-logo.svg" alt="SigNoz" />
@@ -278,24 +344,19 @@ function SideNav({
 					{!collapsed && <span className="brand-logo-name"> SigNoz </span>}
 				</div>
 
-				{!collapsed && (
-					<>
-						{!isFetching && <div className="license tag">{licenseTag}</div>}
-
-						<ToggleButton
-							checked={isDarkMode}
-							onChange={toggleTheme}
-							defaultChecked={isDarkMode}
-							checkedChildren="🌜"
-							unCheckedChildren="🌞"
-						/>
-					</>
+				{!collapsed && licenseTag && (
+					<div className="license tag">{licenseTag}</div>
 				)}
 			</div>
 
 			{isCloudUserVal && (
 				<div className="get-started-nav-items">
-					<Button className="get-started-btn" onClick={onClickGetStarted}>
+					<Button
+						className="get-started-btn"
+						onClick={(event: MouseEvent): void => {
+							onClickGetStarted(event);
+						}}
+					>
 						<RocketIcon size={16} />
 
 						{!collapsed && <> Get Started </>}
@@ -310,18 +371,22 @@ function SideNav({
 						key={item.key || index}
 						item={item}
 						isActive={activeMenuKey === item.key}
-						onClick={(): void => {
-							if (item.key === ROUTES.SETTINGS) {
-								history.push(settingsRoute);
-							} else if (item) {
-								onClickHandler(item?.key as string);
-							}
+						onClick={(event): void => {
+							handleMenuItemClick(event, item);
 						}}
 					/>
 				))}
 			</div>
 
 			<div className="secondary-nav-items">
+				<NavItem
+					isCollapsed={collapsed}
+					key="keyboardShortcuts"
+					item={shortcutMenuItem}
+					isActive={false}
+					onClick={onClickShortcuts}
+				/>
+
 				{licenseData && !isLicenseActive && (
 					<NavItem
 						isCollapsed={collapsed}
@@ -339,8 +404,8 @@ function SideNav({
 							key={item?.key || index}
 							item={item}
 							isActive={activeMenuKey === item?.key}
-							onClick={(): void => {
-								handleUserManagentMenuItemClick(item?.key as string);
+							onClick={(event: MouseEvent): void => {
+								handleUserManagentMenuItemClick(item?.key as string, event);
 							}}
 						/>
 					),
@@ -352,8 +417,12 @@ function SideNav({
 						key={inviteMemberMenuItem.key}
 						item={inviteMemberMenuItem}
 						isActive={activeMenuKey === inviteMemberMenuItem?.key}
-						onClick={(): void => {
-							history.push(`${inviteMemberMenuItem.key}`);
+						onClick={(event: React.MouseEvent): void => {
+							if (isCtrlMetaKey(event)) {
+								openInNewTab(`${inviteMemberMenuItem.key}`);
+							} else {
+								history.push(`${inviteMemberMenuItem.key}`);
+							}
 						}}
 					/>
 				)}
@@ -364,8 +433,11 @@ function SideNav({
 						key={ROUTES.MY_SETTINGS}
 						item={userSettingsMenuItem}
 						isActive={activeMenuKey === userSettingsMenuItem?.key}
-						onClick={(): void => {
-							handleUserManagentMenuItemClick(userSettingsMenuItem?.key as string);
+						onClick={(event: MouseEvent): void => {
+							handleUserManagentMenuItemClick(
+								userSettingsMenuItem?.key as string,
+								event,
+							);
 						}}
 					/>
 				)}

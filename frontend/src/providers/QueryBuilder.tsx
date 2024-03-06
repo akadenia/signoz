@@ -15,6 +15,7 @@ import {
 	MAX_QUERIES,
 	PANEL_TYPES,
 } from 'constants/queryBuilder';
+import ROUTES from 'constants/routes';
 import { useGetCompositeQueryParam } from 'hooks/queryBuilder/useGetCompositeQueryParam';
 import { updateStepInterval } from 'hooks/queryBuilder/useStepInterval';
 import useUrlQuery from 'hooks/useUrlQuery';
@@ -22,6 +23,7 @@ import { createIdFromObjectFields } from 'lib/createIdFromObjectFields';
 import { createNewBuilderItemName } from 'lib/newQueryBuilder/createNewBuilderItemName';
 import { getOperatorsBySourceAndPanelType } from 'lib/newQueryBuilder/getOperatorsBySourceAndPanelType';
 import { replaceIncorrectObjectFields } from 'lib/replaceIncorrectObjectFields';
+import { merge } from 'lodash-es';
 import {
 	createContext,
 	PropsWithChildren,
@@ -98,7 +100,13 @@ export function QueryBuilderProvider({
 		null,
 	);
 
-	const [panelType, setPanelType] = useState<PANEL_TYPES | null>(null);
+	const panelTypeQueryParams = urlQuery.get(
+		QueryParams.panelTypes,
+	) as PANEL_TYPES | null;
+
+	const [panelType, setPanelType] = useState<PANEL_TYPES | null>(
+		panelTypeQueryParams,
+	);
 
 	const [currentQuery, setCurrentQuery] = useState<QueryState>(queryState);
 	const [stagedQuery, setStagedQuery] = useState<Query | null>(null);
@@ -195,7 +203,7 @@ export function QueryBuilderProvider({
 	);
 
 	const initQueryBuilderData = useCallback(
-		(query: Query): void => {
+		(query: Query, timeUpdated?: boolean): void => {
 			const { queryType: newQueryType, ...queryState } = prepareQueryBuilderData(
 				query,
 			);
@@ -210,10 +218,12 @@ export function QueryBuilderProvider({
 			const nextQuery: Query = { ...newQueryState, queryType: type };
 
 			setStagedQuery(nextQuery);
-			setCurrentQuery(newQueryState);
+			setCurrentQuery(
+				timeUpdated ? merge(currentQuery, newQueryState) : newQueryState,
+			);
 			setQueryType(type);
 		},
-		[prepareQueryBuilderData],
+		[prepareQueryBuilderData, currentQuery],
 	);
 
 	const updateAllQueriesOperators = useCallback(
@@ -464,7 +474,11 @@ export function QueryBuilderProvider({
 	);
 
 	const redirectWithQueryBuilderData = useCallback(
-		(query: Partial<Query>, searchParams?: Record<string, unknown>) => {
+		(
+			query: Partial<Query>,
+			searchParams?: Record<string, unknown>,
+			redirectingUrl?: typeof ROUTES[keyof typeof ROUTES],
+		) => {
 			const queryType =
 				!query.queryType || !Object.values(EQueryType).includes(query.queryType)
 					? EQueryType.QUERY_BUILDER
@@ -519,7 +533,9 @@ export function QueryBuilderProvider({
 				);
 			}
 
-			const generatedUrl = `${location.pathname}?${urlQuery}`;
+			const generatedUrl = redirectingUrl
+				? `${redirectingUrl}?${urlQuery}`
+				: `${location.pathname}?${urlQuery}`;
 
 			history.replace(generatedUrl);
 		},

@@ -5,6 +5,7 @@ import { useQueryBuilder } from 'hooks/queryBuilder/useQueryBuilder';
 import useUrlQuery from 'hooks/useUrlQuery';
 import { useDashboard } from 'providers/Dashboard/Dashboard';
 import { memo } from 'react';
+import { getGraphType } from 'utils/getGraphType';
 
 import { WidgetGraphProps } from '../../types';
 import PlotTag from './PlotTag';
@@ -19,6 +20,8 @@ function WidgetGraph({
 	fillSpans,
 	softMax,
 	softMin,
+	selectedLogFields,
+	selectedTracesFields,
 }: WidgetGraphProps): JSX.Element {
 	const { currentQuery } = useQueryBuilder();
 	const { selectedDashboard } = useDashboard();
@@ -32,7 +35,7 @@ function WidgetGraph({
 	const selectedWidget = widgets.find((e) => e.id === widgetId);
 
 	const getWidgetQueryRange = useGetWidgetQueryRange({
-		graphType: selectedGraph,
+		graphType: getGraphType(selectedGraph),
 		selectedTime: selectedTime.enum,
 	});
 
@@ -57,6 +60,8 @@ function WidgetGraph({
 				fillSpans={fillSpans}
 				softMax={softMax}
 				softMin={softMin}
+				selectedLogFields={selectedLogFields}
+				selectedTracesFields={selectedTracesFields}
 			/>
 		</Container>
 	);
