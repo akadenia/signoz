@@ -1,10 +1,16 @@
 .fullscreen-grid-container {
 	overflow: auto;
-	margin-top: 1rem;
+	margin: 8px -8px;
 
 	.react-grid-layout {
 		border: none !important;
 		margin-top: 0;
+
+		.widget-graph-container {
+			&.graph {
+				height: 100%;
+			}
+		}
 	}
 }
 
@@ -23,7 +29,7 @@
 		.ant-modal-header {
 			background-color: var(--bg-ink-400);
 		}
-	}	
+	}
 }
 
 .lightMode {

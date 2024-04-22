@@ -52,6 +52,9 @@ const DashboardContext = createContext<IDashboardContext>({
 	updatedTimeRef: {} as React.MutableRefObject<Dayjs | null>,
 	toScrollWidgetId: '',
 	setToScrollWidgetId: () => {},
+	updateLocalStorageDashboardVariables: () => {},
+	variablesToGetUpdated: [],
+	setVariablesToGetUpdated: () => {},
 });
 
 interface Props {
@@ -85,6 +88,10 @@ export function DashboardProvider({
 		exact: true,
 	});
 
+	const [variablesToGetUpdated, setVariablesToGetUpdated] = useState<string[]>(
+		[],
+	);
+
 	const [layouts, setLayouts] = useState<Layout[]>([]);
 
 	const { isLoggedIn } = useSelector<AppState, AppReducer>((state) => state.app);
@@ -96,9 +103,10 @@ export function DashboardProvider({
 
 	const [selectedDashboard, setSelectedDashboard] = useState<Dashboard>();
 
-	const { currentDashboard } = useDashboardVariablesFromLocalStorage(
-		dashboardId,
-	);
+	const {
+		currentDashboard,
+		updateLocalStorageDashboardVariables,
+	} = useDashboardVariablesFromLocalStorage(dashboardId);
 
 	const updatedTimeRef = useRef<Dayjs | null>(null); // Using ref to store the updated time
 	const modalRef = useRef<any>(null);
@@ -169,6 +177,7 @@ export function DashboardProvider({
 		return data;
 	};
 
+	console.log(variablesToGetUpdated);
 	const dashboardResponse = useQuery(
 		[REACT_QUERY_KEY.DASHBOARD_BY_ID, isDashboardPage?.params],
 		{
@@ -320,6 +329,9 @@ export function DashboardProvider({
 			setSelectedDashboard,
 			updatedTimeRef,
 			setToScrollWidgetId,
+			updateLocalStorageDashboardVariables,
+			variablesToGetUpdated,
+			setVariablesToGetUpdated,
 		}),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[
@@ -330,6 +342,10 @@ export function DashboardProvider({
 			dashboardId,
 			layouts,
 			toScrollWidgetId,
+			updateLocalStorageDashboardVariables,
+			currentDashboard,
+			variablesToGetUpdated,
+			setVariablesToGetUpdated,
 		],
 	);
 

@@ -3,6 +3,7 @@ import { PANEL_TYPES } from 'constants/queryBuilder';
 import { themeColors } from 'constants/theme';
 import getLabelName from 'lib/getLabelName';
 import { MetricRangePayloadProps } from 'types/api/metrics/getQueryRange';
+import { Query } from 'types/api/queryBuilder/queryBuilderData';
 import { QueryData } from 'types/api/widgets/getQuery';
 
 import { drawStyles, lineInterpolations } from './constants';
@@ -87,6 +88,7 @@ export type GetSeriesProps = {
 	widgetMetaData: QueryData[];
 	graphsVisibilityStates?: boolean[];
 	panelType?: PANEL_TYPES;
+	currentQuery?: Query;
 };
 
 export default getSeries;

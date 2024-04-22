@@ -1,6 +1,4 @@
 import ROUTES from 'constants/routes';
-import Shortcuts from 'pages/Shortcuts/Shortcuts';
-import WorkspaceBlocked from 'pages/WorkspaceLocked';
 import { RouteProps } from 'react-router-dom';
 
 import {
@@ -16,6 +14,7 @@ import {
 	EditRulesPage,
 	ErrorDetails,
 	IngestionSettings,
+	InstalledIntegrations,
 	LicensePage,
 	ListAllALertsPage,
 	LiveLogs,
@@ -35,6 +34,7 @@ import {
 	ServiceMetricsPage,
 	ServicesTablePage,
 	SettingsPage,
+	ShortcutsPage,
 	SignupPage,
 	SomethingWentWrong,
 	StatusPage,
@@ -45,6 +45,7 @@ import {
 	TracesSaveViews,
 	UnAuthorized,
 	UsageExplorerPage,
+	WorkspaceBlocked,
 } from './pageComponents';
 
 const routes: AppRoutes[] = [
@@ -57,7 +58,7 @@ const routes: AppRoutes[] = [
 	},
 	{
 		path: ROUTES.GET_STARTED,
-		exact: true,
+		exact: false,
 		component: Onboarding,
 		isPrivate: true,
 		key: 'GET_STARTED',
@@ -331,9 +332,16 @@ const routes: AppRoutes[] = [
 	{
 		path: ROUTES.SHORTCUTS,
 		exact: true,
-		component: Shortcuts,
+		component: ShortcutsPage,
 		isPrivate: true,
 		key: 'SHORTCUTS',
+	},
+	{
+		path: ROUTES.INTEGRATIONS,
+		exact: true,
+		component: InstalledIntegrations,
+		isPrivate: true,
+		key: 'INTEGRATIONS',
 	},
 ];
 
@@ -358,6 +366,8 @@ export const oldRoutes = [
 	'/logs/old-logs-explorer',
 	'/logs-explorer',
 	'/logs-explorer/live',
+	'/logs-save-views',
+	'/traces-save-views',
 	'/settings/api-keys',
 ];
 
@@ -366,6 +376,8 @@ export const oldNewRoutesMapping: Record<string, string> = {
 	'/logs/old-logs-explorer': '/logs/old-logs-explorer',
 	'/logs-explorer': '/logs/logs-explorer',
 	'/logs-explorer/live': '/logs/logs-explorer/live',
+	'/logs-save-views': '/logs/saved-views',
+	'/traces-save-views': '/traces/saved-views',
 	'/settings/api-keys': '/settings/access-tokens',
 };
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	_ "net/http/pprof" // http profiler
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -35,6 +36,7 @@ import (
 	baseapp "go.signoz.io/signoz/pkg/query-service/app"
 	"go.signoz.io/signoz/pkg/query-service/app/dashboards"
 	baseexplorer "go.signoz.io/signoz/pkg/query-service/app/explorer"
+	"go.signoz.io/signoz/pkg/query-service/app/integrations"
 	"go.signoz.io/signoz/pkg/query-service/app/logparsingpipeline"
 	"go.signoz.io/signoz/pkg/query-service/app/opamp"
 	opAmpModel "go.signoz.io/signoz/pkg/query-service/app/opamp/model"
@@ -133,7 +135,7 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 	var reader interfaces.DataConnector
 	storage := os.Getenv("STORAGE")
 	if storage == "clickhouse" {
-		zap.S().Info("Using ClickHouse as datastore ...")
+		zap.L().Info("Using ClickHouse as datastore ...")
 		qb := db.NewDataConnector(
 			localDB,
 			serverOptions.PromConfigPath,
@@ -171,13 +173,22 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 	}
 
 	// initiate opamp
-	_, err = opAmpModel.InitDB(baseconst.RELATIONAL_DATASOURCE_PATH)
+	_, err = opAmpModel.InitDB(localDB)
 	if err != nil {
 		return nil, err
 	}
 
+	integrationsController, err := integrations.NewController(localDB)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"couldn't create integrations controller: %w", err,
+		)
+	}
+
 	// ingestion pipelines manager
-	logParsingPipelineController, err := logparsingpipeline.NewLogParsingPipelinesController(localDB, "sqlite")
+	logParsingPipelineController, err := logparsingpipeline.NewLogParsingPipelinesController(
+		localDB, "sqlite", integrationsController.GetPipelinesForInstalledIntegrations,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +244,7 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 		UsageManager:                  usageManager,
 		FeatureFlags:                  lm,
 		LicenseManager:                lm,
+		IntegrationsController:        integrationsController,
 		LogsParsingPipelineController: logParsingPipelineController,
 		Cache:                         c,
 		FluxInterval:                  fluxInterval,
@@ -278,6 +290,7 @@ func (s *Server) createPrivateServer(apiHandler *api.APIHandler) (*http.Server, 
 
 	r := mux.NewRouter()
 
+	r.Use(baseapp.LogCommentEnricher)
 	r.Use(setTimeoutMiddleware)
 	r.Use(s.analyticsMiddleware)
 	r.Use(loggingMiddlewarePrivate)
@@ -310,13 +323,14 @@ func (s *Server) createPublicServer(apiHandler *api.APIHandler) (*http.Server, e
 	}
 	am := baseapp.NewAuthMiddleware(getUserFromRequest)
 
+	r.Use(baseapp.LogCommentEnricher)
 	r.Use(setTimeoutMiddleware)
 	r.Use(s.analyticsMiddleware)
 	r.Use(loggingMiddleware)
 
 	apiHandler.RegisterRoutes(r, am)
-	apiHandler.RegisterMetricsRoutes(r, am)
 	apiHandler.RegisterLogsRoutes(r, am)
+	apiHandler.RegisterIntegrationRoutes(r, am)
 	apiHandler.RegisterQueryRangeV3Routes(r, am)
 	apiHandler.RegisterQueryRangeV4Routes(r, am)
 
@@ -379,13 +393,14 @@ func (lrw *loggingResponseWriter) Flush() {
 	lrw.ResponseWriter.(http.Flusher).Flush()
 }
 
-func extractQueryRangeV3Data(path string, r *http.Request) (map[string]interface{}, bool) {
-	pathToExtractBodyFrom := "/api/v3/query_range"
+func extractQueryRangeData(path string, r *http.Request) (map[string]interface{}, bool) {
+	pathToExtractBodyFromV3 := "/api/v3/query_range"
+	pathToExtractBodyFromV4 := "/api/v4/query_range"
 
 	data := map[string]interface{}{}
 	var postData *v3.QueryRangeParamsV3
 
-	if path == pathToExtractBodyFrom && (r.Method == "POST") {
+	if (r.Method == "POST") && ((path == pathToExtractBodyFromV3) || (path == pathToExtractBodyFromV4)) {
 		if r.Body != nil {
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -403,32 +418,68 @@ func extractQueryRangeV3Data(path string, r *http.Request) (map[string]interface
 		return nil, false
 	}
 
+	referrer := r.Header.Get("Referer")
+
+	dashboardMatched, err := regexp.MatchString(`/dashboard/[a-zA-Z0-9\-]+/(new|edit)(?:\?.*)?$`, referrer)
+	if err != nil {
+		zap.L().Error("error while matching the referrer", zap.Error(err))
+	}
+	alertMatched, err := regexp.MatchString(`/alerts/(new|edit)(?:\?.*)?$`, referrer)
+	if err != nil {
+		zap.L().Error("error while matching the alert: ", zap.Error(err))
+	}
+	logsExplorerMatched, err := regexp.MatchString(`/logs/logs-explorer(?:\?.*)?$`, referrer)
+	if err != nil {
+		zap.L().Error("error while matching the logs explorer: ", zap.Error(err))
+	}
+	traceExplorerMatched, err := regexp.MatchString(`/traces-explorer(?:\?.*)?$`, referrer)
+	if err != nil {
+		zap.L().Error("error while matching the trace explorer: ", zap.Error(err))
+	}
+
 	signozMetricsUsed := false
 	signozLogsUsed := false
-	dataSources := []string{}
+	signozTracesUsed := false
 	if postData != nil {
 
 		if postData.CompositeQuery != nil {
 			data["queryType"] = postData.CompositeQuery.QueryType
 			data["panelType"] = postData.CompositeQuery.PanelType
 
-			signozLogsUsed, signozMetricsUsed = telemetry.GetInstance().CheckSigNozSignals(postData)
+			signozLogsUsed, signozMetricsUsed, signozTracesUsed = telemetry.GetInstance().CheckSigNozSignals(postData)
 		}
 	}
 
-	if signozMetricsUsed || signozLogsUsed {
+	if signozMetricsUsed || signozLogsUsed || signozTracesUsed {
 		if signozMetricsUsed {
-			dataSources = append(dataSources, "metrics")
 			telemetry.GetInstance().AddActiveMetricsUser()
 		}
 		if signozLogsUsed {
-			dataSources = append(dataSources, "logs")
 			telemetry.GetInstance().AddActiveLogsUser()
 		}
-		data["dataSources"] = dataSources
+		if signozTracesUsed {
+			telemetry.GetInstance().AddActiveTracesUser()
+		}
+		data["metricsUsed"] = signozMetricsUsed
+		data["logsUsed"] = signozLogsUsed
+		data["tracesUsed"] = signozTracesUsed
 		userEmail, err := baseauth.GetEmailFromJwt(r.Context())
 		if err == nil {
-			telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_EVENT_QUERY_RANGE_V3, data, userEmail, true)
+			// switch case to set data["screen"] based on the referrer
+			switch {
+			case dashboardMatched:
+				data["screen"] = "panel"
+			case alertMatched:
+				data["screen"] = "alert"
+			case logsExplorerMatched:
+				data["screen"] = "logs-explorer"
+			case traceExplorerMatched:
+				data["screen"] = "traces-explorer"
+			default:
+				data["screen"] = "unknown"
+				return data, true
+			}
+			telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_EVENT_QUERY_RANGE_API, data, userEmail, true, false)
 		}
 	}
 	return data, true
@@ -455,7 +506,7 @@ func (s *Server) analyticsMiddleware(next http.Handler) http.Handler {
 		route := mux.CurrentRoute(r)
 		path, _ := route.GetPathTemplate()
 
-		queryRangeV3data, metadataExists := extractQueryRangeV3Data(path, r)
+		queryRangeData, metadataExists := extractQueryRangeData(path, r)
 		getActiveLogs(path, r)
 
 		lrw := NewLoggingResponseWriter(w)
@@ -463,7 +514,7 @@ func (s *Server) analyticsMiddleware(next http.Handler) http.Handler {
 
 		data := map[string]interface{}{"path": path, "statusCode": lrw.statusCode}
 		if metadataExists {
-			for key, value := range queryRangeV3data {
+			for key, value := range queryRangeData {
 				data[key] = value
 			}
 		}
@@ -471,7 +522,7 @@ func (s *Server) analyticsMiddleware(next http.Handler) http.Handler {
 		if _, ok := telemetry.EnabledPaths()[path]; ok {
 			userEmail, err := baseauth.GetEmailFromJwt(r.Context())
 			if err == nil {
-				telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_EVENT_PATH, data, userEmail)
+				telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_EVENT_PATH, data, userEmail, true, false)
 			}
 		}
 
@@ -508,7 +559,7 @@ func (s *Server) initListeners() error {
 		return err
 	}
 
-	zap.S().Info(fmt.Sprintf("Query server started listening on %s...", s.serverOptions.HTTPHostPort))
+	zap.L().Info(fmt.Sprintf("Query server started listening on %s...", s.serverOptions.HTTPHostPort))
 
 	// listen on private port to support internal services
 	privateHostPort := s.serverOptions.PrivateHostPort
@@ -521,7 +572,7 @@ func (s *Server) initListeners() error {
 	if err != nil {
 		return err
 	}
-	zap.S().Info(fmt.Sprintf("Query server started listening on private port %s...", s.serverOptions.PrivateHostPort))
+	zap.L().Info(fmt.Sprintf("Query server started listening on private port %s...", s.serverOptions.PrivateHostPort))
 
 	return nil
 }
@@ -533,7 +584,7 @@ func (s *Server) Start() error {
 	if !s.serverOptions.DisableRules {
 		s.ruleManager.Start()
 	} else {
-		zap.S().Info("msg: Rules disabled as rules.disable is set to TRUE")
+		zap.L().Info("msg: Rules disabled as rules.disable is set to TRUE")
 	}
 
 	err := s.initListeners()
@@ -547,23 +598,23 @@ func (s *Server) Start() error {
 	}
 
 	go func() {
-		zap.S().Info("Starting HTTP server", zap.Int("port", httpPort), zap.String("addr", s.serverOptions.HTTPHostPort))
+		zap.L().Info("Starting HTTP server", zap.Int("port", httpPort), zap.String("addr", s.serverOptions.HTTPHostPort))
 
 		switch err := s.httpServer.Serve(s.httpConn); err {
 		case nil, http.ErrServerClosed, cmux.ErrListenerClosed:
 			// normal exit, nothing to do
 		default:
-			zap.S().Error("Could not start HTTP server", zap.Error(err))
+			zap.L().Error("Could not start HTTP server", zap.Error(err))
 		}
 		s.unavailableChannel <- healthcheck.Unavailable
 	}()
 
 	go func() {
-		zap.S().Info("Starting pprof server", zap.String("addr", baseconst.DebugHttpPort))
+		zap.L().Info("Starting pprof server", zap.String("addr", baseconst.DebugHttpPort))
 
 		err = http.ListenAndServe(baseconst.DebugHttpPort, nil)
 		if err != nil {
-			zap.S().Error("Could not start pprof server", zap.Error(err))
+			zap.L().Error("Could not start pprof server", zap.Error(err))
 		}
 	}()
 
@@ -573,14 +624,14 @@ func (s *Server) Start() error {
 	}
 
 	go func() {
-		zap.S().Info("Starting Private HTTP server", zap.Int("port", privatePort), zap.String("addr", s.serverOptions.PrivateHostPort))
+		zap.L().Info("Starting Private HTTP server", zap.Int("port", privatePort), zap.String("addr", s.serverOptions.PrivateHostPort))
 
 		switch err := s.privateHTTP.Serve(s.privateConn); err {
 		case nil, http.ErrServerClosed, cmux.ErrListenerClosed:
 			// normal exit, nothing to do
-			zap.S().Info("private http server closed")
+			zap.L().Info("private http server closed")
 		default:
-			zap.S().Error("Could not start private HTTP server", zap.Error(err))
+			zap.L().Error("Could not start private HTTP server", zap.Error(err))
 		}
 
 		s.unavailableChannel <- healthcheck.Unavailable
@@ -588,10 +639,10 @@ func (s *Server) Start() error {
 	}()
 
 	go func() {
-		zap.S().Info("Starting OpAmp Websocket server", zap.String("addr", baseconst.OpAmpWsEndpoint))
+		zap.L().Info("Starting OpAmp Websocket server", zap.String("addr", baseconst.OpAmpWsEndpoint))
 		err := s.opampServer.Start(baseconst.OpAmpWsEndpoint)
 		if err != nil {
-			zap.S().Info("opamp ws server failed to start", err)
+			zap.L().Error("opamp ws server failed to start", zap.Error(err))
 			s.unavailableChannel <- healthcheck.Unavailable
 		}
 	}()
@@ -667,7 +718,7 @@ func makeRulesManager(
 		return nil, fmt.Errorf("rule manager error: %v", err)
 	}
 
-	zap.S().Info("rules manager is ready")
+	zap.L().Info("rules manager is ready")
 
 	return manager, nil
 }

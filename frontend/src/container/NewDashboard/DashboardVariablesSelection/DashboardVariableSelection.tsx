@@ -1,29 +1,23 @@
 import { Row } from 'antd';
-import { useDashboardVariablesFromLocalStorage } from 'hooks/dashboard/useDashboardFromLocalStorage';
+import { isNull } from 'lodash-es';
 import { useDashboard } from 'providers/Dashboard/Dashboard';
 import { memo, useEffect, useState } from 'react';
 import { IDashboardVariable } from 'types/api/dashboard/getAll';
 
-import { convertVariablesToDbFormat } from './util';
 import VariableItem from './VariableItem';
 
 function DashboardVariableSelection(): JSX.Element | null {
 	const {
 		selectedDashboard,
 		setSelectedDashboard,
-		dashboardId,
-	} = useDashboard();
-
-	const {
 		updateLocalStorageDashboardVariables,
-	} = useDashboardVariablesFromLocalStorage(dashboardId);
+		variablesToGetUpdated,
+		setVariablesToGetUpdated,
+	} = useDashboard();
 
 	const { data } = selectedDashboard || {};
 
 	const { variables } = data || {};
-
-	const [update, setUpdate] = useState<boolean>(false);
-	const [lastUpdatedVar, setLastUpdatedVar] = useState<string>('');
 
 	const [variablesTableData, setVariablesTableData] = useState<any>([]);
 
@@ -50,8 +44,27 @@ function DashboardVariableSelection(): JSX.Element | null {
 	}, [variables]);
 
 	const onVarChanged = (name: string): void => {
-		setLastUpdatedVar(name);
-		setUpdate(!update);
+		/**
+		 * this function takes care of adding the dependent variables to current update queue and removing
+		 * the updated variable name from the queue
+		 */
+		const dependentVariables = variablesTableData
+			?.map((variable: any) => {
+				if (variable.type === 'QUERY') {
+					const re = new RegExp(`\\{\\{\\s*?\\.${name}\\s*?\\}\\}`); // regex for `{{.var}}`
+					const queryValue = variable.queryValue || '';
+					const dependVarReMatch = queryValue.match(re);
+					if (dependVarReMatch !== null && dependVarReMatch.length > 0) {
+						return variable.name;
+					}
+				}
+				return null;
+			})
+			.filter((val: string | null) => !isNull(val));
+		setVariablesToGetUpdated((prev) => [
+			...prev.filter((v) => v !== name),
+			...dependentVariables,
+		]);
 	};
 
 	const onValueUpdate = (
@@ -61,37 +74,31 @@ function DashboardVariableSelection(): JSX.Element | null {
 		allSelected: boolean,
 	): void => {
 		if (id) {
-			const newVariablesArr = variablesTableData.map(
-				(variable: IDashboardVariable) => {
-					const variableCopy = { ...variable };
-
-					if (variableCopy.id === id) {
-						variableCopy.selectedValue = value;
-						variableCopy.allSelected = allSelected;
-					}
-
-					return variableCopy;
-				},
-			);
 			updateLocalStorageDashboardVariables(name, value, allSelected);
 
-			const variables = convertVariablesToDbFormat(newVariablesArr);
-
 			if (selectedDashboard) {
-				setSelectedDashboard({
-					...selectedDashboard,
-					data: {
-						...selectedDashboard?.data,
-						variables: {
-							...variables,
-						},
-					},
+				setSelectedDashboard((prev) => {
+					if (prev) {
+						return {
+							...prev,
+							data: {
+								...prev?.data,
+								variables: {
+									...prev?.data.variables,
+									[id]: {
+										...prev.data.variables[id],
+										selectedValue: value,
+										allSelected,
+									},
+								},
+							},
+						};
+					}
+					return prev;
 				});
 			}
 
 			onVarChanged(name);
-
-			setUpdate(!update);
 		}
 	};
 
@@ -112,13 +119,12 @@ function DashboardVariableSelection(): JSX.Element | null {
 					<VariableItem
 						key={`${variable.name}${variable.id}}${variable.order}`}
 						existingVariables={variables}
-						lastUpdatedVar={lastUpdatedVar}
 						variableData={{
 							name: variable.name,
 							...variable,
-							change: update,
 						}}
 						onValueUpdate={onValueUpdate}
+						variablesToGetUpdated={variablesToGetUpdated}
 					/>
 				))}
 		</Row>
