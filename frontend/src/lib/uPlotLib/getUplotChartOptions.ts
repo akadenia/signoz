@@ -57,7 +57,6 @@ export const getUPlotChartOptions = ({
 	graphsVisibilityStates,
 	setGraphsVisibilityStates,
 	thresholds,
-	fillSpans,
 	softMax,
 	softMin,
 	panelType,
@@ -100,7 +99,7 @@ export const getUPlotChartOptions = ({
 			y: {
 				...getYAxisScale({
 					thresholds,
-					series: apiResponse?.data.newResult.data.result,
+					series: apiResponse?.data?.newResult?.data?.result || [],
 					yAxisUnit,
 					softMax,
 					softMin,
@@ -108,7 +107,7 @@ export const getUPlotChartOptions = ({
 			},
 		},
 		plugins: [
-			tooltipPlugin(apiResponse, yAxisUnit, fillSpans),
+			tooltipPlugin({ apiResponse, yAxisUnit }),
 			onClickPlugin({
 				onClick: onClickHandler,
 			}),

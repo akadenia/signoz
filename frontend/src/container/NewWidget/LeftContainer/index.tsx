@@ -1,3 +1,5 @@
+import './LeftContainer.styles.scss';
+
 import { DEFAULT_ENTITY_VERSION } from 'constants/app';
 import { initialQueriesMap, PANEL_TYPES } from 'constants/queryBuilder';
 import { REACT_QUERY_KEY } from 'constants/reactQueryKeys';
@@ -67,12 +69,13 @@ function LeftContainer({
 			setRequestData((prev) => ({
 				...prev,
 				selectedTime: selectedTime.enum || prev.selectedTime,
+				globalSelectedInterval,
 				graphType: getGraphType(selectedGraph || selectedWidget.panelTypes),
 				query: stagedQuery,
 			}));
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [stagedQuery, selectedTime]);
+	}, [stagedQuery, selectedTime, globalSelectedInterval]);
 
 	const queryResponse = useGetQueryRange(
 		requestData,
@@ -96,7 +99,7 @@ function LeftContainer({
 				setRequestData={setRequestData}
 				selectedWidget={selectedWidget}
 			/>
-			<QueryContainer>
+			<QueryContainer className="query-section-left-container">
 				<QuerySection selectedGraph={selectedGraph} queryResponse={queryResponse} />
 				{selectedGraph === PANEL_TYPES.LIST && (
 					<ExplorerColumnsRenderer

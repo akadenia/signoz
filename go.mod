@@ -6,7 +6,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.20.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/SigNoz/govaluate v0.0.0-20240203125216-988004ccc7fd
-	github.com/SigNoz/signoz-otel-collector v0.88.20
+	github.com/SigNoz/signoz-otel-collector v0.88.26
 	github.com/SigNoz/zap_otlp/zap_otlp_encoder v0.0.0-20230822164844-1b861a431974
 	github.com/SigNoz/zap_otlp/zap_otlp_sync v0.0.0-20230822164844-1b861a431974
 	github.com/antonmedv/expr v1.15.3
@@ -46,7 +46,6 @@ require (
 	github.com/russellhaering/goxmldsig v1.2.0
 	github.com/samber/lo v1.38.1
 	github.com/sethvargo/go-password v0.2.0
-	github.com/smartystreets/assertions v1.13.1
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/soheilhy/cmux v0.1.5
 	github.com/srikanthccv/ClickHouse-go-mock v0.7.0
@@ -66,9 +65,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.23.1
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/crypto v0.19.0
+	golang.org/x/crypto v0.21.0
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1
-	golang.org/x/net v0.21.0
+	golang.org/x/net v0.23.0
 	golang.org/x/oauth2 v0.16.0
 	google.golang.org/grpc v1.62.0
 	google.golang.org/protobuf v1.33.0
@@ -76,6 +75,14 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.28.2
+)
+
+require (
+	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
+	golang.org/x/tools v0.16.1 // indirect
+	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 require (
@@ -140,6 +147,7 @@ require (
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/onsi/gomega v1.19.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.88.0 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
@@ -190,7 +198,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/goleak v1.3.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	gonum.org/v1/gonum v0.14.0 // indirect
@@ -199,8 +207,8 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240123012728-ef4313101c80 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
-	k8s.io/klog/v2 v2.100.1 // indirect
+	k8s.io/klog/v2 v2.110.1 // indirect
 	k8s.io/utils v0.0.0-20230711102312-30195339c3c7 // indirect
 )
 
-replace github.com/prometheus/prometheus => github.com/SigNoz/prometheus v1.10.1
+replace github.com/prometheus/prometheus => github.com/SigNoz/prometheus v1.11.0

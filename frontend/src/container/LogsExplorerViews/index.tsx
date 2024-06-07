@@ -409,7 +409,7 @@ function LogsExplorerViews({
 
 	useEffect(() => {
 		const currentParams = data?.params as Omit<LogTimeRange, 'pageSize'>;
-		const currentData = data?.payload.data.newResult.data.result || [];
+		const currentData = data?.payload?.data?.newResult?.data?.result || [];
 		if (currentData.length > 0 && currentData[0].list) {
 			const currentLogs: ILog[] = currentData[0].list.map((item) => ({
 				...item.data,
@@ -531,8 +531,8 @@ function LogsExplorerViews({
 			logs.map((log) => {
 				const timestamp =
 					typeof log.timestamp === 'string'
-						? dayjs(log.timestamp).format()
-						: dayjs(log.timestamp / 1e6).format();
+						? dayjs(log.timestamp).format('YYYY-MM-DD HH:mm:ss.SSS')
+						: dayjs(log.timestamp / 1e6).format('YYYY-MM-DD HH:mm:ss.SSS');
 
 				return FlatLogData({
 					timestamp,
@@ -650,7 +650,7 @@ function LogsExplorerViews({
 
 					{selectedPanelType === PANEL_TYPES.TABLE && (
 						<LogsExplorerTable
-							data={data?.payload.data.newResult.data.result || []}
+							data={data?.payload?.data?.newResult?.data?.result || []}
 							isLoading={isLoading || isFetching}
 							isError={isError}
 						/>

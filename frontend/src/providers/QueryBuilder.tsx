@@ -802,6 +802,7 @@ export function QueryBuilderProvider({
 
 		if (newCurrentQuery) {
 			setCurrentQuery(newCurrentQuery);
+			setSupersetQuery(newCurrentQuery);
 		}
 	};
 
