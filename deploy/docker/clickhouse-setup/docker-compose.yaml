@@ -259,6 +259,7 @@ services:
       # - "14268:14268"   # Jaeger thrift HTTP
       # - "55678:55678"   # OpenCensus receiver
       # - "55679:55679"   # zPages extension
+      - "8082:8082"       # send HTTP logs
     restart: on-failure
     depends_on:
       clickhouse:

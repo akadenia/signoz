@@ -64,6 +64,9 @@ receivers:
       - endpoint: https://guyshahine.com/
         method: GET
     collection_interval: 300s
+  httplogreceiver/json:
+    endpoint: 0.0.0.0:8082
+    source: json
 
 processors:
   batch:
@@ -171,6 +174,6 @@ service:
       processors: [batch]
       exporters: [clickhousemetricswrite/prometheus]
     logs:
-      receivers: [otlp, tcplog/docker]
+      receivers: [otlp, tcplog/docker, httplogreceiver/json]
       processors: [batch]
       exporters: [clickhouselogsexporter]
