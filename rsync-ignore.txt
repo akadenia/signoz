@@ -68,3 +68,6 @@ e2e/playwright-report/
 e2e/blob-report/
 e2e/playwright/.cache/
 e2e/.auth
+
+
+/AppleInternal/Library/
