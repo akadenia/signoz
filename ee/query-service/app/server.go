@@ -28,7 +28,6 @@ import (
 	"go.signoz.io/signoz/ee/query-service/integrations/gateway"
 	"go.signoz.io/signoz/ee/query-service/interfaces"
 	baseauth "go.signoz.io/signoz/pkg/query-service/auth"
-	baseInterface "go.signoz.io/signoz/pkg/query-service/interfaces"
 	v3 "go.signoz.io/signoz/pkg/query-service/model/v3"
 
 	licensepkg "go.signoz.io/signoz/ee/query-service/license"
@@ -65,7 +64,6 @@ type ServerOptions struct {
 	// alert specific params
 	DisableRules      bool
 	RuleRepoURL       string
-	PreferDelta       bool
 	PreferSpanMetrics bool
 	MaxIdleConns      int
 	MaxOpenConns      int
@@ -79,9 +77,7 @@ type ServerOptions struct {
 // Server runs HTTP api service
 type Server struct {
 	serverOptions *ServerOptions
-	conn          net.Listener
 	ruleManager   *rules.Manager
-	separatePorts bool
 
 	// public http router
 	httpConn   net.Listener
@@ -90,9 +86,6 @@ type Server struct {
 	// private http
 	privateConn net.Listener
 	privateHTTP *http.Server
-
-	// feature flags
-	featureLookup baseint.FeatureLookup
 
 	// Usage manager
 	usageManager *usage.Manager
@@ -262,7 +255,6 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 	apiOpts := api.APIHandlerOptions{
 		DataConnector:                 reader,
 		SkipConfig:                    skipConfig,
-		PreferDelta:                   serverOptions.PreferDelta,
 		PreferSpanMetrics:             serverOptions.PreferSpanMetrics,
 		MaxIdleConns:                  serverOptions.MaxIdleConns,
 		MaxOpenConns:                  serverOptions.MaxOpenConns,
@@ -317,7 +309,7 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 
 func (s *Server) createPrivateServer(apiHandler *api.APIHandler) (*http.Server, error) {
 
-	r := mux.NewRouter()
+	r := baseapp.NewRouter()
 
 	r.Use(baseapp.LogCommentEnricher)
 	r.Use(setTimeoutMiddleware)
@@ -344,7 +336,7 @@ func (s *Server) createPrivateServer(apiHandler *api.APIHandler) (*http.Server, 
 
 func (s *Server) createPublicServer(apiHandler *api.APIHandler) (*http.Server, error) {
 
-	r := mux.NewRouter()
+	r := baseapp.NewRouter()
 
 	// add auth middleware
 	getUserFromRequest := func(r *http.Request) (*basemodel.UserPayload, error) {
@@ -385,7 +377,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		path, _ := route.GetPathTemplate()
 		startTime := time.Now()
 		next.ServeHTTP(w, r)
-		zap.L().Info(path+"\ttimeTaken:"+time.Now().Sub(startTime).String(), zap.Duration("timeTaken", time.Now().Sub(startTime)), zap.String("path", path))
+		zap.L().Info(path, zap.Duration("timeTaken", time.Since(startTime)), zap.String("path", path))
 	})
 }
 
@@ -397,7 +389,7 @@ func loggingMiddlewarePrivate(next http.Handler) http.Handler {
 		path, _ := route.GetPathTemplate()
 		startTime := time.Now()
 		next.ServeHTTP(w, r)
-		zap.L().Info(path+"\tprivatePort: true \ttimeTaken"+time.Now().Sub(startTime).String(), zap.Duration("timeTaken", time.Now().Sub(startTime)), zap.String("path", path), zap.Bool("tprivatePort", true))
+		zap.L().Info(path, zap.Duration("timeTaken", time.Since(startTime)), zap.String("path", path), zap.Bool("tprivatePort", true))
 	})
 }
 
@@ -711,7 +703,7 @@ func makeRulesManager(
 	db *sqlx.DB,
 	ch baseint.Reader,
 	disableRules bool,
-	fm baseInterface.FeatureLookup) (*rules.Manager, error) {
+	fm baseint.FeatureLookup) (*rules.Manager, error) {
 
 	// create engine
 	pqle, err := pqle.FromConfigPath(promConfigPath)

@@ -17,6 +17,7 @@ import { NotificationProvider } from 'hooks/useNotifications';
 import { ResourceProvider } from 'hooks/useResourceAttribute';
 import history from 'lib/history';
 import { identity, pick, pickBy } from 'lodash-es';
+import posthog from 'posthog-js';
 import { DashboardProvider } from 'providers/Dashboard/Dashboard';
 import { QueryBuilderProvider } from 'providers/QueryBuilder';
 import { Suspense, useEffect, useState } from 'react';
@@ -38,7 +39,7 @@ import defaultRoutes, {
 
 function App(): JSX.Element {
 	const themeConfig = useThemeConfig();
-	const { data } = useLicense();
+	const { data: licenseData } = useLicense();
 	const [routes, setRoutes] = useState<AppRoutes[]>(defaultRoutes);
 	const { role, isLoggedIn: isLoggedInState, user, org } = useSelector<
 		AppState,
@@ -92,10 +93,10 @@ function App(): JSX.Element {
 	});
 
 	const isOnBasicPlan =
-		data?.payload?.licenses?.some(
+		licenseData?.payload?.licenses?.some(
 			(license) =>
 				license.isCurrent && license.planKey === LICENSE_PLAN_KEY.BASIC_PLAN,
-		) || data?.payload?.licenses === null;
+		) || licenseData?.payload?.licenses === null;
 
 	const enableAnalytics = (user: User): void => {
 		const orgName =
@@ -112,9 +113,7 @@ function App(): JSX.Element {
 		};
 
 		const sanitizedIdentifyPayload = pickBy(identifyPayload, identity);
-
 		const domain = extractDomain(email);
-
 		const hostNameParts = hostname.split('.');
 
 		const groupTraits = {
@@ -127,10 +126,30 @@ function App(): JSX.Element {
 		};
 
 		window.analytics.identify(email, sanitizedIdentifyPayload);
-
 		window.analytics.group(domain, groupTraits);
-
 		window.clarity('identify', email, name);
+
+		posthog?.identify(email, {
+			email,
+			name,
+			orgName,
+			tenant_id: hostNameParts[0],
+			data_region: hostNameParts[1],
+			tenant_url: hostname,
+			company_domain: domain,
+			source: 'signoz-ui',
+			isPaidUser: !!licenseData?.payload?.trialConvertedToSubscription,
+		});
+
+		posthog?.group('company', domain, {
+			name: orgName,
+			tenant_id: hostNameParts[0],
+			data_region: hostNameParts[1],
+			tenant_url: hostname,
+			company_domain: domain,
+			source: 'signoz-ui',
+			isPaidUser: !!licenseData?.payload?.trialConvertedToSubscription,
+		});
 	};
 
 	useEffect(() => {
@@ -144,10 +163,6 @@ function App(): JSX.Element {
 			!isIdentifiedUser
 		) {
 			setLocalStorageApi(LOCALSTORAGE.IS_IDENTIFIED_USER, 'true');
-
-			if (isCloudUserVal) {
-				enableAnalytics(user);
-			}
 		}
 
 		if (
@@ -178,23 +193,30 @@ function App(): JSX.Element {
 	}, [pathname]);
 
 	useEffect(() => {
-		try {
-			const isThemeAnalyticsSent = getLocalStorageApi(
-				LOCALSTORAGE.THEME_ANALYTICS,
-			);
-			if (!isThemeAnalyticsSent) {
-				trackEvent('Theme Analytics', {
-					theme: isDarkMode ? THEME_MODE.DARK : THEME_MODE.LIGHT,
-					user: pick(user, ['email', 'userId', 'name']),
-					org,
-				});
-				setLocalStorageApi(LOCALSTORAGE.THEME_ANALYTICS, 'true');
+		if (user && user?.email && user?.userId && user?.name) {
+			try {
+				const isThemeAnalyticsSent = getLocalStorageApi(
+					LOCALSTORAGE.THEME_ANALYTICS_V1,
+				);
+				if (!isThemeAnalyticsSent) {
+					trackEvent('Theme Analytics', {
+						theme: isDarkMode ? THEME_MODE.DARK : THEME_MODE.LIGHT,
+						user: pick(user, ['email', 'userId', 'name']),
+						org,
+					});
+					setLocalStorageApi(LOCALSTORAGE.THEME_ANALYTICS_V1, 'true');
+				}
+			} catch {
+				console.error('Failed to parse local storage theme analytics event');
 			}
-		} catch {
-			console.error('Failed to parse local storage theme analytics event');
 		}
+
+		if (isCloudUserVal && user && user.email) {
+			enableAnalytics(user);
+		}
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [user]);
 
 	return (
 		<ConfigProvider theme={themeConfig}>
