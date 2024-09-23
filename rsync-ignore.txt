@@ -69,5 +69,4 @@ e2e/blob-report/
 e2e/playwright/.cache/
 e2e/.auth
 
-
-/AppleInternal/Library/
+/AppleInternal/Library/BuildRoots/4ff29661-3588-11ef-9513-e2437461156c/Library/Caches/com.apple.xbs/Sources/rsync/rsync/io.c
