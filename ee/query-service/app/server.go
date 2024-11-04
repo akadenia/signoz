@@ -77,6 +77,7 @@ type ServerOptions struct {
 	FluxInterval      string
 	Cluster           string
 	GatewayUrl        string
+	UseLogsNewSchema  bool
 }
 
 // Server runs HTTP api service
@@ -154,6 +155,7 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 			serverOptions.MaxOpenConns,
 			serverOptions.DialTimeout,
 			serverOptions.Cluster,
+			serverOptions.UseLogsNewSchema,
 		)
 		go qb.Start(readerReady)
 		reader = qb
@@ -168,6 +170,14 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 			return nil, err
 		}
 	}
+	var c cache.Cache
+	if serverOptions.CacheConfigPath != "" {
+		cacheOpts, err := cache.LoadFromYAMLCacheConfigFile(serverOptions.CacheConfigPath)
+		if err != nil {
+			return nil, err
+		}
+		c = cache.NewCache(cacheOpts)
+	}
 
 	<-readerReady
 	rm, err := makeRulesManager(serverOptions.PromConfigPath,
@@ -175,8 +185,11 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 		serverOptions.RuleRepoURL,
 		localDB,
 		reader,
+		c,
 		serverOptions.DisableRules,
-		lm)
+		lm,
+		serverOptions.UseLogsNewSchema,
+	)
 
 	if err != nil {
 		return nil, err
@@ -233,15 +246,6 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 	telemetry.GetInstance().SetReader(reader)
 	telemetry.GetInstance().SetSaasOperator(constants.SaasSegmentKey)
 
-	var c cache.Cache
-	if serverOptions.CacheConfigPath != "" {
-		cacheOpts, err := cache.LoadFromYAMLCacheConfigFile(serverOptions.CacheConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		c = cache.NewCache(cacheOpts)
-	}
-
 	fluxInterval, err := time.ParseDuration(serverOptions.FluxInterval)
 
 	if err != nil {
@@ -265,6 +269,7 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 		Cache:                         c,
 		FluxInterval:                  fluxInterval,
 		Gateway:                       gatewayProxy,
+		UseLogsNewSchema:              serverOptions.UseLogsNewSchema,
 	}
 
 	apiHandler, err := api.NewAPIHandler(apiOpts)
@@ -359,6 +364,7 @@ func (s *Server) createPublicServer(apiHandler *api.APIHandler) (*http.Server, e
 	apiHandler.RegisterLogsRoutes(r, am)
 	apiHandler.RegisterIntegrationRoutes(r, am)
 	apiHandler.RegisterQueryRangeV3Routes(r, am)
+	apiHandler.RegisterInfraMetricsRoutes(r, am)
 	apiHandler.RegisterQueryRangeV4Routes(r, am)
 	apiHandler.RegisterWebSocketPaths(r, am)
 	apiHandler.RegisterMessagingQueuesRoutes(r, am)
@@ -727,8 +733,10 @@ func makeRulesManager(
 	ruleRepoURL string,
 	db *sqlx.DB,
 	ch baseint.Reader,
+	cache cache.Cache,
 	disableRules bool,
-	fm baseint.FeatureLookup) (*baserules.Manager, error) {
+	fm baseint.FeatureLookup,
+	useLogsNewSchema bool) (*baserules.Manager, error) {
 
 	// create engine
 	pqle, err := pqle.FromConfigPath(promConfigPath)
@@ -750,13 +758,15 @@ func makeRulesManager(
 		RepoURL:      ruleRepoURL,
 		DBConn:       db,
 		Context:      context.Background(),
-		Logger:       nil,
+		Logger:       zap.L(),
 		DisableRules: disableRules,
 		FeatureFlags: fm,
 		Reader:       ch,
+		Cache:        cache,
 		EvalDelay:    baseconst.GetEvalDelay(),
 
-		PrepareTaskFunc: rules.PrepareTaskFunc,
+		PrepareTaskFunc:  rules.PrepareTaskFunc,
+		UseLogsNewSchema: useLogsNewSchema,
 	}
 
 	// create Manager

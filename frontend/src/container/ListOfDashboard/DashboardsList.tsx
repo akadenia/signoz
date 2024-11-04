@@ -25,8 +25,6 @@ import logEvent from 'api/common/logEvent';
 import createDashboard from 'api/dashboard/create';
 import { AxiosError } from 'axios';
 import cx from 'classnames';
-import LaunchChatSupport from 'components/LaunchChatSupport/LaunchChatSupport';
-import { dashboardListMessage } from 'components/LaunchChatSupport/util';
 import { ENTITY_VERSION_V4 } from 'constants/app';
 import ROUTES from 'constants/routes';
 import { Base64Icons } from 'container/NewDashboard/DashboardSettings/General/utils';
@@ -79,6 +77,7 @@ import { isCloudUser } from 'utils/app';
 
 import DashboardTemplatesModal from './DashboardTemplates/DashboardTemplatesModal';
 import ImportJSON from './ImportJSON';
+import { RequestDashboardBtn } from './RequestDashboardBtn';
 import { DeleteButton } from './TableComponents/DeleteButton';
 import {
 	DashboardDynamicColumns,
@@ -91,6 +90,7 @@ function DashboardsList(): JSX.Element {
 	const {
 		data: dashboardListResponse,
 		isLoading: isDashboardListLoading,
+		isRefetching: isDashboardListRefetching,
 		error: dashboardFetchError,
 		refetch: refetchDashboardList,
 	} = useGetAllDashboard();
@@ -458,17 +458,19 @@ function DashboardsList(): JSX.Element {
 									placement="left"
 									overlayClassName="title-toolip"
 								>
-									<Typography.Text data-testid={`dashboard-title-${index}`}>
-										<Link to={getLink()} className="title">
-											<img
-												src={dashboard?.image || Base64Icons[0]}
-												style={{ height: '14px', width: '14px' }}
-												alt="dashboard-image"
-												className="dashboard-icon"
-											/>
+									<Link to={getLink()} className="title-link">
+										<img
+											src={dashboard?.image || Base64Icons[0]}
+											alt="dashboard-image"
+											className="dashboard-icon"
+										/>
+										<Typography.Text
+											data-testid={`dashboard-title-${index}`}
+											className="title"
+										>
 											{dashboard.name}
-										</Link>
-									</Typography.Text>
+										</Typography.Text>
+									</Link>
 								</Tooltip>
 							</div>
 
@@ -690,20 +692,19 @@ function DashboardsList(): JSX.Element {
 						<Typography.Text className="subtitle">
 							Create and manage dashboards for your workspace.
 						</Typography.Text>
-						<LaunchChatSupport
-							attributes={{
-								screen: 'Dashboard list page',
-							}}
-							eventName="Dashboard: Facing Issues in dashboard"
-							message={dashboardListMessage}
-							buttonText="Need help with dashboards?"
-							onHoverText="Click here to get help with dashboards"
-							intercomMessageDisabled
-						/>
 					</Flex>
+					{isCloudUser() && (
+						<div className="integrations-container">
+							<div className="integrations-content">
+								<RequestDashboardBtn />
+							</div>
+						</div>
+					)}
 				</div>
 
-				{isDashboardListLoading || isFilteringDashboards ? (
+				{isDashboardListLoading ||
+				isFilteringDashboards ||
+				isDashboardListRefetching ? (
 					<div className="loading-dashboard-details">
 						<Skeleton.Input active size="large" className="skeleton-1" />
 						<Skeleton.Input active size="large" className="skeleton-1" />
@@ -902,7 +903,11 @@ function DashboardsList(): JSX.Element {
 									columns={columns}
 									dataSource={data}
 									showSorterTooltip
-									loading={isDashboardListLoading || isFilteringDashboards}
+									loading={
+										isDashboardListLoading ||
+										isFilteringDashboards ||
+										isDashboardListRefetching
+									}
 									showHeader={false}
 									pagination={paginationConfig}
 								/>

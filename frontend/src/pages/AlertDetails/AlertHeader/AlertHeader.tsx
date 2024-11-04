@@ -1,7 +1,8 @@
 import './AlertHeader.styles.scss';
 
+import LineClampedText from 'periscope/components/LineClampedText/LineClampedText';
 import { useAlertRule } from 'providers/Alert';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import AlertActionButtons from './ActionButtons/ActionButtons';
 import AlertLabels from './AlertLabels/AlertLabels';
@@ -18,7 +19,7 @@ export type AlertHeaderProps = {
 	};
 };
 function AlertHeader({ alertDetails }: AlertHeaderProps): JSX.Element {
-	const { state, alert, labels, disabled } = alertDetails;
+	const { state, alert, labels } = alertDetails;
 
 	const labelsWithoutSeverity = useMemo(
 		() =>
@@ -28,21 +29,17 @@ function AlertHeader({ alertDetails }: AlertHeaderProps): JSX.Element {
 		[labels],
 	);
 
-	const { isAlertRuleDisabled, setIsAlertRuleDisabled } = useAlertRule();
-
-	useEffect(() => {
-		if (isAlertRuleDisabled === undefined) {
-			setIsAlertRuleDisabled(disabled);
-		}
-	}, [disabled, setIsAlertRuleDisabled, isAlertRuleDisabled]);
+	const { alertRuleState } = useAlertRule();
 
 	return (
 		<div className="alert-info">
 			<div className="alert-info__info-wrapper">
 				<div className="top-section">
 					<div className="alert-title-wrapper">
-						<AlertState state={isAlertRuleDisabled ? 'disabled' : state} />
-						<div className="alert-title">{alert}</div>
+						<AlertState state={alertRuleState ?? state} />
+						<div className="alert-title">
+							<LineClampedText text={alert} />
+						</div>
 					</div>
 				</div>
 				<div className="bottom-section">

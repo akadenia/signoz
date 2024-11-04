@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"go.signoz.io/signoz/pkg/query-service/model"
+	"go.uber.org/zap"
 )
 
 type DataSource string
@@ -288,6 +288,10 @@ func (q AttributeKeyDataType) Validate() error {
 	}
 }
 
+func (q AttributeKeyDataType) String() string {
+	return string(q)
+}
+
 // FilterAttributeValueRequest is a request to fetch possible attribute values
 // for a selected aggregate operator, aggregate attribute, filter attribute key
 // and search text.
@@ -317,6 +321,10 @@ const (
 	AttributeKeyTypeTag         AttributeKeyType = "tag"
 	AttributeKeyTypeResource    AttributeKeyType = "resource"
 )
+
+func (t AttributeKeyType) String() string {
+	return string(t)
+}
 
 type AttributeKey struct {
 	Key      string               `json:"key"`
@@ -371,11 +379,39 @@ type QueryRangeParamsV3 struct {
 	FormatForWeb   bool                   `json:"formatForWeb,omitempty"`
 }
 
+func (q *QueryRangeParamsV3) Clone() *QueryRangeParamsV3 {
+	if q == nil {
+		return nil
+	}
+	return &QueryRangeParamsV3{
+		Start:          q.Start,
+		End:            q.End,
+		Step:           q.Step,
+		CompositeQuery: q.CompositeQuery.Clone(),
+		Variables:      q.Variables,
+		NoCache:        q.NoCache,
+		Version:        q.Version,
+		FormatForWeb:   q.FormatForWeb,
+	}
+}
+
 type PromQuery struct {
 	Query    string `json:"query"`
 	Stats    string `json:"stats,omitempty"`
 	Disabled bool   `json:"disabled"`
 	Legend   string `json:"legend,omitempty"`
+}
+
+func (p *PromQuery) Clone() *PromQuery {
+	if p == nil {
+		return nil
+	}
+	return &PromQuery{
+		Query:    p.Query,
+		Stats:    p.Stats,
+		Disabled: p.Disabled,
+		Legend:   p.Legend,
+	}
 }
 
 func (p *PromQuery) Validate() error {
@@ -396,6 +432,16 @@ type ClickHouseQuery struct {
 	Legend   string `json:"legend,omitempty"`
 }
 
+func (c *ClickHouseQuery) Clone() *ClickHouseQuery {
+	if c == nil {
+		return nil
+	}
+	return &ClickHouseQuery{
+		Query:    c.Query,
+		Disabled: c.Disabled,
+		Legend:   c.Legend,
+	}
+}
 func (c *ClickHouseQuery) Validate() error {
 	if c == nil {
 		return nil
@@ -419,6 +465,43 @@ type CompositeQuery struct {
 	Unit string `json:"unit,omitempty"`
 	// FillGaps is used to fill the gaps in the time series data
 	FillGaps bool `json:"fillGaps,omitempty"`
+}
+
+func (c *CompositeQuery) Clone() *CompositeQuery {
+	if c == nil {
+		return nil
+	}
+	var builderQueries map[string]*BuilderQuery
+	if c.BuilderQueries != nil {
+		builderQueries = make(map[string]*BuilderQuery)
+		for name, query := range c.BuilderQueries {
+			builderQueries[name] = query.Clone()
+		}
+	}
+	var clickHouseQueries map[string]*ClickHouseQuery
+	if c.ClickHouseQueries != nil {
+		clickHouseQueries = make(map[string]*ClickHouseQuery)
+		for name, query := range c.ClickHouseQueries {
+			clickHouseQueries[name] = query.Clone()
+		}
+	}
+	var promQueries map[string]*PromQuery
+	if c.PromQueries != nil {
+		promQueries = make(map[string]*PromQuery)
+		for name, query := range c.PromQueries {
+			promQueries[name] = query.Clone()
+		}
+	}
+	return &CompositeQuery{
+		BuilderQueries:    builderQueries,
+		ClickHouseQueries: clickHouseQueries,
+		PromQueries:       promQueries,
+		PanelType:         c.PanelType,
+		QueryType:         c.QueryType,
+		Unit:              c.Unit,
+		FillGaps:          c.FillGaps,
+	}
+
 }
 
 func (c *CompositeQuery) EnabledQueries() int {
@@ -646,6 +729,7 @@ const (
 	FunctionNameMedian5     FunctionName = "median5"
 	FunctionNameMedian7     FunctionName = "median7"
 	FunctionNameTimeShift   FunctionName = "timeShift"
+	FunctionNameAnomaly     FunctionName = "anomaly"
 )
 
 func (f FunctionName) Validate() error {
@@ -665,7 +749,8 @@ func (f FunctionName) Validate() error {
 		FunctionNameMedian3,
 		FunctionNameMedian5,
 		FunctionNameMedian7,
-		FunctionNameTimeShift:
+		FunctionNameTimeShift,
+		FunctionNameAnomaly:
 		return nil
 	default:
 		return fmt.Errorf("invalid function name: %s", f)
@@ -673,33 +758,106 @@ func (f FunctionName) Validate() error {
 }
 
 type Function struct {
-	Name FunctionName  `json:"name"`
-	Args []interface{} `json:"args,omitempty"`
+	Name      FunctionName           `json:"name"`
+	Args      []interface{}          `json:"args,omitempty"`
+	NamedArgs map[string]interface{} `json:"namedArgs,omitempty"`
+}
+
+type MetricTableHints struct {
+	TimeSeriesTableName string
+	SamplesTableName    string
 }
 
 type BuilderQuery struct {
-	QueryName          string            `json:"queryName"`
-	StepInterval       int64             `json:"stepInterval"`
-	DataSource         DataSource        `json:"dataSource"`
-	AggregateOperator  AggregateOperator `json:"aggregateOperator"`
-	AggregateAttribute AttributeKey      `json:"aggregateAttribute,omitempty"`
-	Temporality        Temporality       `json:"temporality,omitempty"`
-	Filters            *FilterSet        `json:"filters,omitempty"`
-	GroupBy            []AttributeKey    `json:"groupBy,omitempty"`
-	Expression         string            `json:"expression"`
-	Disabled           bool              `json:"disabled"`
-	Having             []Having          `json:"having,omitempty"`
-	Legend             string            `json:"legend,omitempty"`
-	Limit              uint64            `json:"limit"`
-	Offset             uint64            `json:"offset"`
-	PageSize           uint64            `json:"pageSize"`
-	OrderBy            []OrderBy         `json:"orderBy,omitempty"`
-	ReduceTo           ReduceToOperator  `json:"reduceTo,omitempty"`
-	SelectColumns      []AttributeKey    `json:"selectColumns,omitempty"`
-	TimeAggregation    TimeAggregation   `json:"timeAggregation,omitempty"`
-	SpaceAggregation   SpaceAggregation  `json:"spaceAggregation,omitempty"`
-	Functions          []Function        `json:"functions,omitempty"`
-	ShiftBy            int64
+	QueryName            string            `json:"queryName"`
+	StepInterval         int64             `json:"stepInterval"`
+	DataSource           DataSource        `json:"dataSource"`
+	AggregateOperator    AggregateOperator `json:"aggregateOperator"`
+	AggregateAttribute   AttributeKey      `json:"aggregateAttribute,omitempty"`
+	Temporality          Temporality       `json:"temporality,omitempty"`
+	Filters              *FilterSet        `json:"filters,omitempty"`
+	GroupBy              []AttributeKey    `json:"groupBy,omitempty"`
+	Expression           string            `json:"expression"`
+	Disabled             bool              `json:"disabled"`
+	Having               []Having          `json:"having,omitempty"`
+	Legend               string            `json:"legend,omitempty"`
+	Limit                uint64            `json:"limit"`
+	Offset               uint64            `json:"offset"`
+	PageSize             uint64            `json:"pageSize"`
+	OrderBy              []OrderBy         `json:"orderBy,omitempty"`
+	ReduceTo             ReduceToOperator  `json:"reduceTo,omitempty"`
+	SelectColumns        []AttributeKey    `json:"selectColumns,omitempty"`
+	TimeAggregation      TimeAggregation   `json:"timeAggregation,omitempty"`
+	SpaceAggregation     SpaceAggregation  `json:"spaceAggregation,omitempty"`
+	Functions            []Function        `json:"functions,omitempty"`
+	ShiftBy              int64
+	IsAnomaly            bool
+	QueriesUsedInFormula []string
+	MetricTableHints     *MetricTableHints `json:"-"`
+}
+
+func (b *BuilderQuery) SetShiftByFromFunc() {
+	// Remove the time shift function from the list of functions and set the shift by value
+	var timeShiftBy int64
+	if len(b.Functions) > 0 {
+		for idx := range b.Functions {
+			function := &b.Functions[idx]
+			if function.Name == FunctionNameTimeShift {
+				// move the function to the beginning of the list
+				// so any other function can use the shifted time
+				var fns []Function
+				fns = append(fns, *function)
+				fns = append(fns, b.Functions[:idx]...)
+				fns = append(fns, b.Functions[idx+1:]...)
+				b.Functions = fns
+				if len(function.Args) > 0 {
+					if shift, ok := function.Args[0].(float64); ok {
+						timeShiftBy = int64(shift)
+					} else if shift, ok := function.Args[0].(string); ok {
+						shiftBy, err := strconv.ParseFloat(shift, 64)
+						if err != nil {
+							zap.L().Error("failed to parse time shift by", zap.String("shift", shift), zap.Error(err))
+						}
+						timeShiftBy = int64(shiftBy)
+					}
+				}
+				break
+			}
+		}
+	}
+	b.ShiftBy = timeShiftBy
+}
+
+func (b *BuilderQuery) Clone() *BuilderQuery {
+	if b == nil {
+		return nil
+	}
+	return &BuilderQuery{
+		QueryName:            b.QueryName,
+		StepInterval:         b.StepInterval,
+		DataSource:           b.DataSource,
+		AggregateOperator:    b.AggregateOperator,
+		AggregateAttribute:   b.AggregateAttribute,
+		Temporality:          b.Temporality,
+		Filters:              b.Filters.Clone(),
+		GroupBy:              b.GroupBy,
+		Expression:           b.Expression,
+		Disabled:             b.Disabled,
+		Having:               b.Having,
+		Legend:               b.Legend,
+		Limit:                b.Limit,
+		Offset:               b.Offset,
+		PageSize:             b.PageSize,
+		OrderBy:              b.OrderBy,
+		ReduceTo:             b.ReduceTo,
+		SelectColumns:        b.SelectColumns,
+		TimeAggregation:      b.TimeAggregation,
+		SpaceAggregation:     b.SpaceAggregation,
+		Functions:            b.Functions,
+		ShiftBy:              b.ShiftBy,
+		IsAnomaly:            b.IsAnomaly,
+		QueriesUsedInFormula: b.QueriesUsedInFormula,
+	}
 }
 
 // CanDefaultZero returns true if the missing value can be substituted by zero
@@ -878,6 +1036,16 @@ type FilterSet struct {
 	Items    []FilterItem `json:"items"`
 }
 
+func (f *FilterSet) Clone() *FilterSet {
+	if f == nil {
+		return nil
+	}
+	return &FilterSet{
+		Operator: f.Operator,
+		Items:    f.Items,
+	}
+}
+
 func (f *FilterSet) Validate() error {
 	if f == nil {
 		return nil
@@ -946,9 +1114,16 @@ func (f *FilterItem) CacheKey() string {
 	return fmt.Sprintf("key:%s,op:%s,value:%v", f.Key.CacheKey(), f.Operator, f.Value)
 }
 
+type Direction string
+
+const (
+	DirectionAsc  Direction = "asc"
+	DirectionDesc Direction = "desc"
+)
+
 type OrderBy struct {
 	ColumnName string               `json:"columnName"`
-	Order      string               `json:"order"`
+	Order      Direction            `json:"order"`
 	Key        string               `json:"-"`
 	DataType   AttributeKeyDataType `json:"-"`
 	Type       AttributeKeyType     `json:"-"`
@@ -1029,17 +1204,14 @@ type Table struct {
 }
 
 type Result struct {
-	QueryName string    `json:"queryName,omitempty"`
-	Series    []*Series `json:"series,omitempty"`
-	List      []*Row    `json:"list,omitempty"`
-	Table     *Table    `json:"table,omitempty"`
-}
-
-type LogsLiveTailClient struct {
-	Name  string
-	Logs  chan *model.SignozLog
-	Done  chan *bool
-	Error chan error
+	QueryName        string    `json:"queryName,omitempty"`
+	Series           []*Series `json:"series,omitempty"`
+	PredictedSeries  []*Series `json:"predictedSeries,omitempty"`
+	UpperBoundSeries []*Series `json:"upperBoundSeries,omitempty"`
+	LowerBoundSeries []*Series `json:"lowerBoundSeries,omitempty"`
+	AnomalyScores    []*Series `json:"anomalyScores,omitempty"`
+	List             []*Row    `json:"list,omitempty"`
+	Table            *Table    `json:"table,omitempty"`
 }
 
 type Series struct {
@@ -1160,115 +1332,6 @@ type MetricMetadataResponse struct {
 	Temporality string    `json:"temporality"`
 }
 
-type LabelsString string
-
-func (l *LabelsString) MarshalJSON() ([]byte, error) {
-	lbls := make(map[string]string)
-	err := json.Unmarshal([]byte(*l), &lbls)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(lbls)
-}
-
-func (l *LabelsString) Scan(src interface{}) error {
-	if data, ok := src.(string); ok {
-		*l = LabelsString(data)
-	}
-	return nil
-}
-
-func (l LabelsString) String() string {
-	return string(l)
-}
-
-type RuleStateTimeline struct {
-	Items  []RuleStateHistory  `json:"items"`
-	Total  uint64              `json:"total"`
-	Labels map[string][]string `json:"labels"`
-}
-
-type RuleStateHistory struct {
-	RuleID   string `json:"ruleID" ch:"rule_id"`
-	RuleName string `json:"ruleName" ch:"rule_name"`
-	// One of ["normal", "firing"]
-	OverallState        model.AlertState `json:"overallState" ch:"overall_state"`
-	OverallStateChanged bool             `json:"overallStateChanged" ch:"overall_state_changed"`
-	// One of ["normal", "firing", "no_data", "muted"]
-	State        model.AlertState `json:"state" ch:"state"`
-	StateChanged bool             `json:"stateChanged" ch:"state_changed"`
-	UnixMilli    int64            `json:"unixMilli" ch:"unix_milli"`
-	Labels       LabelsString     `json:"labels" ch:"labels"`
-	Fingerprint  uint64           `json:"fingerprint" ch:"fingerprint"`
-	Value        float64          `json:"value" ch:"value"`
-
-	RelatedTracesLink string `json:"relatedTracesLink"`
-	RelatedLogsLink   string `json:"relatedLogsLink"`
-}
-
-type QueryRuleStateHistory struct {
-	Start   int64      `json:"start"`
-	End     int64      `json:"end"`
-	State   string     `json:"state"`
-	Filters *FilterSet `json:"filters"`
-	Offset  int64      `json:"offset"`
-	Limit   int64      `json:"limit"`
-	Order   string     `json:"order"`
-}
-
-func (r *QueryRuleStateHistory) Validate() error {
-	if r.Start == 0 || r.End == 0 {
-		return fmt.Errorf("start and end are required")
-	}
-	if r.Offset < 0 || r.Limit < 0 {
-		return fmt.Errorf("offset and limit must be greater than 0")
-	}
-	if r.Order != "asc" && r.Order != "desc" {
-		return fmt.Errorf("order must be asc or desc")
-	}
-	return nil
-}
-
-type RuleStateHistoryContributor struct {
-	Fingerprint       uint64       `json:"fingerprint" ch:"fingerprint"`
-	Labels            LabelsString `json:"labels" ch:"labels"`
-	Count             uint64       `json:"count" ch:"count"`
-	RelatedTracesLink string       `json:"relatedTracesLink"`
-	RelatedLogsLink   string       `json:"relatedLogsLink"`
-}
-
-type RuleStateTransition struct {
-	RuleID         string           `json:"ruleID" ch:"rule_id"`
-	State          model.AlertState `json:"state" ch:"state"`
-	FiringTime     int64            `json:"firingTime" ch:"firing_time"`
-	ResolutionTime int64            `json:"resolutionTime" ch:"resolution_time"`
-}
-
-type ReleStateItem struct {
-	State model.AlertState `json:"state"`
-	Start int64            `json:"start"`
-	End   int64            `json:"end"`
-}
-
-type Stats struct {
-	TotalCurrentTriggers           uint64  `json:"totalCurrentTriggers"`
-	TotalPastTriggers              uint64  `json:"totalPastTriggers"`
-	CurrentTriggersSeries          *Series `json:"currentTriggersSeries"`
-	PastTriggersSeries             *Series `json:"pastTriggersSeries"`
-	CurrentAvgResolutionTime       string  `json:"currentAvgResolutionTime"`
-	PastAvgResolutionTime          string  `json:"pastAvgResolutionTime"`
-	CurrentAvgResolutionTimeSeries *Series `json:"currentAvgResolutionTimeSeries"`
-	PastAvgResolutionTimeSeries    *Series `json:"pastAvgResolutionTimeSeries"`
-}
-
-type QueryProgress struct {
-	ReadRows uint64 `json:"read_rows"`
-
-	ReadBytes uint64 `json:"read_bytes"`
-
-	ElapsedMs uint64 `json:"elapsed_ms"`
-}
-
 type URLShareableTimeRange struct {
 	Start    int64 `json:"start"`
 	End      int64 `json:"end"`
@@ -1289,4 +1352,10 @@ type URLShareableOptions struct {
 	MaxLines      int            `json:"maxLines"`
 	Format        string         `json:"format"`
 	SelectColumns []AttributeKey `json:"selectColumns"`
+}
+
+type QBOptions struct {
+	GraphLimitQtype string
+	IsLivetailQuery bool
+	PreferRPM       bool
 }
