@@ -599,8 +599,21 @@ func (r *ruleDB) GetAlertsInfo(ctx context.Context) (*model.AlertsInfo, error) {
 					}
 				}
 			}
+			if rule.RuleType == RuleTypeAnomaly {
+				alertsInfo.AnomalyBasedAlerts = alertsInfo.AnomalyBasedAlerts + 1
+			}
 		} else if rule.AlertType == AlertTypeTraces {
 			alertsInfo.TracesBasedAlerts = alertsInfo.TracesBasedAlerts + 1
+
+			if rule.RuleCondition != nil && rule.RuleCondition.CompositeQuery != nil {
+				if rule.RuleCondition.CompositeQuery.QueryType == v3.QueryTypeClickHouseSQL {
+					if strings.Contains(alert, "signoz_traces.distributed_signoz_index_v2") ||
+						strings.Contains(alert, "signoz_traces.distributed_signoz_spans") ||
+						strings.Contains(alert, "signoz_traces.distributed_signoz_error_index_v2") {
+						alertsInfo.AlertsWithTraceChQuery = alertsInfo.AlertsWithTraceChQuery + 1
+					}
+				}
+			}
 		}
 		alertsInfo.TotalAlerts = alertsInfo.TotalAlerts + 1
 	}

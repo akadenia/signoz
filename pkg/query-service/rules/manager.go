@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"go.uber.org/zap"
 
 	"errors"
@@ -24,7 +22,6 @@ import (
 	"go.signoz.io/signoz/pkg/query-service/model"
 	pqle "go.signoz.io/signoz/pkg/query-service/pqlEngine"
 	"go.signoz.io/signoz/pkg/query-service/telemetry"
-	"go.signoz.io/signoz/pkg/query-service/utils/labels"
 )
 
 type PrepareTaskOptions struct {
@@ -38,7 +35,22 @@ type PrepareTaskOptions struct {
 	ManagerOpts *ManagerOptions
 	NotifyFunc  NotifyFunc
 
-	UseLogsNewSchema bool
+	UseLogsNewSchema  bool
+	UseTraceNewSchema bool
+}
+
+type PrepareTestRuleOptions struct {
+	Rule        *PostableRule
+	RuleDB      RuleDB
+	Logger      *zap.Logger
+	Reader      interfaces.Reader
+	Cache       cache.Cache
+	FF          interfaces.FeatureLookup
+	ManagerOpts *ManagerOptions
+	NotifyFunc  NotifyFunc
+
+	UseLogsNewSchema  bool
+	UseTraceNewSchema bool
 }
 
 const taskNamesuffix = "webAppEditor"
@@ -81,7 +93,9 @@ type ManagerOptions struct {
 
 	PrepareTaskFunc func(opts PrepareTaskOptions) (Task, error)
 
-	UseLogsNewSchema bool
+	UseLogsNewSchema    bool
+	UseTraceNewSchema   bool
+	PrepareTestRuleFunc func(opts PrepareTestRuleOptions) (int, *model.ApiError)
 }
 
 // The Manager manages recording and alerting rules.
@@ -99,12 +113,14 @@ type Manager struct {
 
 	logger *zap.Logger
 
-	featureFlags    interfaces.FeatureLookup
-	reader          interfaces.Reader
-	cache           cache.Cache
-	prepareTaskFunc func(opts PrepareTaskOptions) (Task, error)
+	featureFlags        interfaces.FeatureLookup
+	reader              interfaces.Reader
+	cache               cache.Cache
+	prepareTaskFunc     func(opts PrepareTaskOptions) (Task, error)
+	prepareTestRuleFunc func(opts PrepareTestRuleOptions) (int, *model.ApiError)
 
-	UseLogsNewSchema bool
+	UseLogsNewSchema  bool
+	UseTraceNewSchema bool
 }
 
 func defaultOptions(o *ManagerOptions) *ManagerOptions {
@@ -123,6 +139,9 @@ func defaultOptions(o *ManagerOptions) *ManagerOptions {
 	if o.PrepareTaskFunc == nil {
 		o.PrepareTaskFunc = defaultPrepareTaskFunc
 	}
+	if o.PrepareTestRuleFunc == nil {
+		o.PrepareTestRuleFunc = defaultTestNotification
+	}
 	return o
 }
 
@@ -140,6 +159,7 @@ func defaultPrepareTaskFunc(opts PrepareTaskOptions) (Task, error) {
 			opts.FF,
 			opts.Reader,
 			opts.UseLogsNewSchema,
+			opts.UseTraceNewSchema,
 			WithEvalDelay(opts.ManagerOpts.EvalDelay),
 		)
 
@@ -203,17 +223,18 @@ func NewManager(o *ManagerOptions) (*Manager, error) {
 	telemetry.GetInstance().SetAlertsInfoCallback(db.GetAlertsInfo)
 
 	m := &Manager{
-		tasks:           map[string]Task{},
-		rules:           map[string]Rule{},
-		notifier:        notifier,
-		ruleDB:          db,
-		opts:            o,
-		block:           make(chan struct{}),
-		logger:          o.Logger,
-		featureFlags:    o.FeatureFlags,
-		reader:          o.Reader,
-		cache:           o.Cache,
-		prepareTaskFunc: o.PrepareTaskFunc,
+		tasks:               map[string]Task{},
+		rules:               map[string]Rule{},
+		notifier:            notifier,
+		ruleDB:              db,
+		opts:                o,
+		block:               make(chan struct{}),
+		logger:              o.Logger,
+		featureFlags:        o.FeatureFlags,
+		reader:              o.Reader,
+		cache:               o.Cache,
+		prepareTaskFunc:     o.PrepareTaskFunc,
+		prepareTestRuleFunc: o.PrepareTestRuleFunc,
 	}
 	return m, nil
 }
@@ -351,7 +372,8 @@ func (m *Manager) editTask(rule *PostableRule, taskName string) error {
 		ManagerOpts: m.opts,
 		NotifyFunc:  m.prepareNotifyFunc(),
 
-		UseLogsNewSchema: m.opts.UseLogsNewSchema,
+		UseLogsNewSchema:  m.opts.UseLogsNewSchema,
+		UseTraceNewSchema: m.opts.UseTraceNewSchema,
 	})
 
 	if err != nil {
@@ -473,7 +495,8 @@ func (m *Manager) addTask(rule *PostableRule, taskName string) error {
 		ManagerOpts: m.opts,
 		NotifyFunc:  m.prepareNotifyFunc(),
 
-		UseLogsNewSchema: m.opts.UseLogsNewSchema,
+		UseLogsNewSchema:  m.opts.UseLogsNewSchema,
+		UseTraceNewSchema: m.opts.UseTraceNewSchema,
 	})
 
 	if err != nil {
@@ -788,78 +811,21 @@ func (m *Manager) TestNotification(ctx context.Context, ruleStr string) (int, *m
 	parsedRule, err := ParsePostableRule([]byte(ruleStr))
 
 	if err != nil {
-		return 0, newApiErrorBadData(err)
+		return 0, model.BadRequest(err)
 	}
 
-	var alertname = parsedRule.AlertName
-	if alertname == "" {
-		// alertname is not mandatory for testing, so picking
-		// a random string here
-		alertname = uuid.New().String()
-	}
+	alertCount, apiErr := m.prepareTestRuleFunc(PrepareTestRuleOptions{
+		Rule:              parsedRule,
+		RuleDB:            m.ruleDB,
+		Logger:            m.logger,
+		Reader:            m.reader,
+		Cache:             m.cache,
+		FF:                m.featureFlags,
+		ManagerOpts:       m.opts,
+		NotifyFunc:        m.prepareNotifyFunc(),
+		UseLogsNewSchema:  m.opts.UseLogsNewSchema,
+		UseTraceNewSchema: m.opts.UseTraceNewSchema,
+	})
 
-	// append name to indicate this is test alert
-	parsedRule.AlertName = fmt.Sprintf("%s%s", alertname, TestAlertPostFix)
-
-	var rule Rule
-
-	if parsedRule.RuleType == RuleTypeThreshold {
-
-		// add special labels for test alerts
-		parsedRule.Annotations[labels.AlertSummaryLabel] = fmt.Sprintf("The rule threshold is set to %.4f, and the observed metric value is {{$value}}.", *parsedRule.RuleCondition.Target)
-		parsedRule.Labels[labels.RuleSourceLabel] = ""
-		parsedRule.Labels[labels.AlertRuleIdLabel] = ""
-
-		// create a threshold rule
-		rule, err = NewThresholdRule(
-			alertname,
-			parsedRule,
-			m.featureFlags,
-			m.reader,
-			m.opts.UseLogsNewSchema,
-			WithSendAlways(),
-			WithSendUnmatched(),
-		)
-
-		if err != nil {
-			zap.L().Error("failed to prepare a new threshold rule for test", zap.String("name", rule.Name()), zap.Error(err))
-			return 0, newApiErrorBadData(err)
-		}
-
-	} else if parsedRule.RuleType == RuleTypeProm {
-
-		// create promql rule
-		rule, err = NewPromRule(
-			alertname,
-			parsedRule,
-			m.logger,
-			m.reader,
-			m.opts.PqlEngine,
-			WithSendAlways(),
-			WithSendUnmatched(),
-		)
-
-		if err != nil {
-			zap.L().Error("failed to prepare a new promql rule for test", zap.String("name", rule.Name()), zap.Error(err))
-			return 0, newApiErrorBadData(err)
-		}
-	} else {
-		return 0, newApiErrorBadData(fmt.Errorf("failed to derive ruletype with given information"))
-	}
-
-	// set timestamp to current utc time
-	ts := time.Now().UTC()
-
-	count, err := rule.Eval(ctx, ts)
-	if err != nil {
-		zap.L().Error("evaluating rule failed", zap.String("rule", rule.Name()), zap.Error(err))
-		return 0, newApiErrorInternal(fmt.Errorf("rule evaluation failed"))
-	}
-	alertsFound, ok := count.(int)
-	if !ok {
-		return 0, newApiErrorInternal(fmt.Errorf("something went wrong"))
-	}
-	rule.SendAlerts(ctx, ts, 0, time.Duration(1*time.Minute), m.prepareNotifyFunc())
-
-	return alertsFound, nil
+	return alertCount, apiErr
 }

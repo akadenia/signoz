@@ -57,6 +57,7 @@ export const alertDefaults: AlertDef = {
 	},
 	annotations: defaultAnnotations,
 	evalWindow: defaultEvalWindow,
+	alert: '',
 };
 
 export const anamolyAlertDefaults: AlertDef = {
@@ -101,6 +102,7 @@ export const anamolyAlertDefaults: AlertDef = {
 	},
 	annotations: defaultAnnotations,
 	evalWindow: defaultEvalWindow,
+	alert: '',
 };
 
 export const logAlertDefaults: AlertDef = {
@@ -115,7 +117,7 @@ export const logAlertDefaults: AlertDef = {
 			chQueries: {
 				A: {
 					name: 'A',
-					query: `select \ntoStartOfInterval(fromUnixTimestamp64Nano(timestamp), INTERVAL 30 MINUTE) AS interval, \ntoFloat64(count()) as value \nFROM signoz_logs.distributed_logs_v2  \nWHERE timestamp BETWEEN {{.start_timestamp_nano}} AND {{.end_timestamp_nano}}  \nGROUP BY interval;\n\n-- available variables:\n-- \t{{.start_timestamp_nano}}\n-- \t{{.end_timestamp_nano}}\n\n-- required columns (or alias):\n-- \tvalue\n-- \tinterval`,
+					query: `select \ntoStartOfInterval(fromUnixTimestamp64Nano(timestamp), INTERVAL 30 MINUTE) AS interval, \ntoFloat64(count()) as value \nFROM signoz_logs.distributed_logs_v2  \nWHERE timestamp BETWEEN {{.start_timestamp_nano}} AND {{.end_timestamp_nano}} \nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}} \nGROUP BY interval;\n\n-- Please check docs here https://signoz.io/docs/userguide/logs_clickhouse_queries/\n\n-- available variables:\n-- \t{{.start_timestamp_nano}}\n-- \t{{.end_timestamp_nano}}\n-- \t{{.start_timestamp}}\n-- \t{{.end_timestamp}}\n\n-- required columns (or alias):\n-- \tvalue\n-- \tinterval`,
 					legend: '',
 					disabled: false,
 				},
@@ -132,6 +134,7 @@ export const logAlertDefaults: AlertDef = {
 	},
 	annotations: defaultAnnotations,
 	evalWindow: defaultEvalWindow,
+	alert: '',
 };
 
 export const traceAlertDefaults: AlertDef = {
@@ -146,7 +149,7 @@ export const traceAlertDefaults: AlertDef = {
 			chQueries: {
 				A: {
 					name: 'A',
-					query: `SELECT \n\ttoStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS interval, \n\tstringTagMap['peer.service'] AS op_name, \n\ttoFloat64(avg(durationNano)) AS value \nFROM signoz_traces.distributed_signoz_index_v2  \nWHERE stringTagMap['peer.service']!='' \nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} \nGROUP BY (op_name, interval);\n\n-- available variables:\n-- \t{{.start_datetime}}\n-- \t{{.end_datetime}}\n\n-- required column alias:\n-- \tvalue\n-- \tinterval`,
+					query: `SELECT \n\ttoStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS interval, \n\tresource_string_service$$name AS \`service.name\`, \n\ttoFloat64(avg(duration_nano)) AS value \nFROM signoz_traces.distributed_signoz_index_v3  \nWHERE resource_string_service$$name !='' \nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} \nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}} \nGROUP BY (\`service.name\`, interval);\n\n-- Please check docs here https://signoz.io/docs/userguide/writing-clickhouse-traces-query/\n\n-- available variables:\n-- \t{{.start_datetime}}\n-- \t{{.end_datetime}}\n-- \t{{.start_timestamp}}\n-- \t{{.end_timestamp}}\n\n-- required column alias:\n-- \tvalue\n-- \tinterval`,
 					legend: '',
 					disabled: false,
 				},
@@ -163,6 +166,7 @@ export const traceAlertDefaults: AlertDef = {
 	},
 	annotations: defaultAnnotations,
 	evalWindow: defaultEvalWindow,
+	alert: '',
 };
 
 export const exceptionAlertDefaults: AlertDef = {
@@ -194,6 +198,7 @@ export const exceptionAlertDefaults: AlertDef = {
 	},
 	annotations: defaultAnnotations,
 	evalWindow: defaultEvalWindow,
+	alert: '',
 };
 
 export const ALERTS_VALUES_MAP: Record<AlertTypes, AlertDef> = {

@@ -546,6 +546,9 @@ type SignozLogV2 struct {
 	SeverityText      string             `json:"severity_text" ch:"severity_text"`
 	SeverityNumber    uint8              `json:"severity_number" ch:"severity_number"`
 	Body              string             `json:"body" ch:"body"`
+	ScopeName         string             `json:"scope_name" ch:"scope_name"`
+	ScopeVersion      string             `json:"scope_version" ch:"scope_version"`
+	ScopeString       map[string]string  `json:"scope_string" ch:"scope_string"`
 	Resources_string  map[string]string  `json:"resources_string" ch:"resources_string"`
 	Attributes_string map[string]string  `json:"attributes_string" ch:"attributes_string"`
 	Attributes_number map[string]float64 `json:"attributes_float" ch:"attributes_number"`
@@ -617,6 +620,7 @@ type AlertsInfo struct {
 	TotalAlerts                  int      `json:"totalAlerts"`
 	LogsBasedAlerts              int      `json:"logsBasedAlerts"`
 	MetricBasedAlerts            int      `json:"metricBasedAlerts"`
+	AnomalyBasedAlerts           int      `json:"anomalyBasedAlerts"`
 	TracesBasedAlerts            int      `json:"tracesBasedAlerts"`
 	TotalChannels                int      `json:"totalChannels"`
 	SlackChannels                int      `json:"slackChannels"`
@@ -632,6 +636,7 @@ type AlertsInfo struct {
 	AlertNames                   []string `json:"alertNames"`
 	AlertsWithTSV2               int      `json:"alertsWithTSv2"`
 	AlertsWithLogsChQuery        int      `json:"alertsWithLogsChQuery"`
+	AlertsWithTraceChQuery       int      `json:"alertsWithTraceChQuery"`
 	AlertsWithLogsContainsOp     int      `json:"alertsWithLogsContainsOp"`
 }
 
@@ -651,7 +656,10 @@ type DashboardsInfo struct {
 	TracesBasedPanels               int      `json:"tracesBasedPanels"`
 	DashboardNames                  []string `json:"dashboardNames"`
 	QueriesWithTSV2                 int      `json:"queriesWithTSV2"`
+	QueriesWithTagAttrs             int      `json:"queriesWithTagAttrs"`
 	DashboardsWithLogsChQuery       int      `json:"dashboardsWithLogsChQuery"`
+	DashboardsWithTraceChQuery      int      `json:"dashboardsWithTraceChQuery"`
+	DashboardNamesWithTraceChQuery  []string `json:"dashboardNamesWithTraceChQuery"`
 	LogsPanelsWithAttrContainsOp    int      `json:"logsPanelsWithAttrContainsOp"`
 }
 
