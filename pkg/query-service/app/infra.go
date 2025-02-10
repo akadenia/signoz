@@ -544,3 +544,105 @@ func (aH *APIHandler) getJobList(w http.ResponseWriter, r *http.Request) {
 
 	aH.Respond(w, jobList)
 }
+
+func (aH *APIHandler) getPvcList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req := model.VolumeListRequest{}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	pvcList, err := aH.pvcsRepo.GetPvcList(ctx, req)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	aH.Respond(w, pvcList)
+}
+
+func (aH *APIHandler) getPvcAttributeKeys(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req, err := parseFilterAttributeKeyRequest(r)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	keys, err := aH.pvcsRepo.GetPvcAttributeKeys(ctx, *req)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	aH.Respond(w, keys)
+}
+
+func (aH *APIHandler) getPvcAttributeValues(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req, err := parseFilterAttributeValueRequest(r)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	values, err := aH.pvcsRepo.GetPvcAttributeValues(ctx, *req)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	aH.Respond(w, values)
+}
+
+func (aH *APIHandler) getK8sInfraOnboardingStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	status := model.OnboardingStatus{}
+
+	didSendPodMetrics, err := aH.podsRepo.DidSendPodMetrics(ctx)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	if !didSendPodMetrics {
+		aH.Respond(w, status)
+		return
+	}
+
+	didSendClusterMetrics, err := aH.podsRepo.DidSendClusterMetrics(ctx)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	didSendNodeMetrics, err := aH.nodesRepo.DidSendNodeMetrics(ctx)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	didSendOptionalPodMetrics, err := aH.podsRepo.IsSendingOptionalPodMetrics(ctx)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	requiredMetadata, err := aH.podsRepo.SendingRequiredMetadata(ctx)
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+
+	status.DidSendPodMetrics = didSendPodMetrics
+	status.DidSendClusterMetrics = didSendClusterMetrics
+	status.DidSendNodeMetrics = didSendNodeMetrics
+	status.IsSendingOptionalPodMetrics = didSendOptionalPodMetrics
+	status.IsSendingRequiredMetadata = requiredMetadata
+
+	aH.Respond(w, status)
+}

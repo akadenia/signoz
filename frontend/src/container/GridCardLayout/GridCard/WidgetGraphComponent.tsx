@@ -22,11 +22,8 @@ import {
 	useRef,
 	useState,
 } from 'react';
-import { useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
-import { AppState } from 'store/reducers';
 import { Dashboard } from 'types/api/dashboard/getAll';
-import AppReducer from 'types/reducer/app';
 import { v4 } from 'uuid';
 
 import WidgetHeader from '../WidgetHeader';
@@ -48,6 +45,10 @@ function WidgetGraphComponent({
 	onClickHandler,
 	onDragSelect,
 	customTooltipElement,
+	openTracesButton,
+	onOpenTraceBtnClick,
+	customSeries,
+	customErrorMessage,
 }: WidgetGraphComponentProps): JSX.Element {
 	const [deleteModal, setDeleteModal] = useState(false);
 	const [hovered, setHovered] = useState(false);
@@ -76,10 +77,6 @@ function WidgetGraphComponent({
 	const tableProcessedDataRef = useRef<RowData[]>([]);
 
 	const { setLayouts, selectedDashboard, setSelectedDashboard } = useDashboard();
-
-	const featureResponse = useSelector<AppState, AppReducer['featureResponse']>(
-		(state) => state.app.featureResponse,
-	);
 
 	const onToggleModal = useCallback(
 		(func: Dispatch<SetStateAction<boolean>>) => {
@@ -117,7 +114,6 @@ function WidgetGraphComponent({
 					setSelectedDashboard(updatedDashboard.payload);
 				}
 				setDeleteModal(false);
-				featureResponse.refetch();
 			},
 			onError: () => {
 				notifications.error({
@@ -322,6 +318,13 @@ function WidgetGraphComponent({
 					setSearchTerm={setSearchTerm}
 				/>
 			</div>
+
+			{queryResponse.error && customErrorMessage && (
+				<div className="error-message-container">
+					<Typography.Text type="warning">{customErrorMessage}</Typography.Text>
+				</div>
+			)}
+
 			{queryResponse.isLoading && widget.panelTypes !== PANEL_TYPES.LIST && (
 				<Skeleton />
 			)}
@@ -341,6 +344,9 @@ function WidgetGraphComponent({
 						tableProcessedDataRef={tableProcessedDataRef}
 						customTooltipElement={customTooltipElement}
 						searchTerm={searchTerm}
+						openTracesButton={openTracesButton}
+						onOpenTraceBtnClick={onOpenTraceBtnClick}
+						customSeries={customSeries}
 					/>
 				</div>
 			)}
