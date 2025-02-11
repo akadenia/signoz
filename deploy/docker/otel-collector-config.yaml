@@ -107,7 +107,7 @@ service:
       processors: [signozspanmetrics/delta, batch]
       exporters: [clickhousetraces]
     metrics:
-      receivers: [otlp, httpcheck]
+      receivers: [otlp]
       processors: [batch]
       exporters: [clickhousemetricswrite, clickhousemetricswritev2]
     metrics/prometheus:
