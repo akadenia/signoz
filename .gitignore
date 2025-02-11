@@ -76,3 +76,6 @@ dist/
 
 # ignore user_scripts that is fetched by init-clickhouse
 deploy/common/clickhouse/user_scripts/
+
+az_ssh_config
+sshconfig
